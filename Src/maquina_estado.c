@@ -11,7 +11,7 @@ void Estado_FSM() {
             break;
 
         case ESTADO_CONFIG:
-        	Conf_Captura(&config_global.captura);
+        	//Conf_Captura(&config_global.captura);
         	deviceState = ESTADO_CAPTURA;
             break;
 
@@ -21,7 +21,7 @@ void Estado_FSM() {
 
         case ESTADO_DECOD:
             {
-                FSM((uint8_t*)buffer_states, NUM_MUESTRAS, &menu_config);
+                //UART_FSM((uint8_t*)buffer_states, NUM_MUESTRAS, &menu_config);
             }
             Update_Display_And_Log();
             deviceState = ESTADO_READY;

@@ -25,6 +25,7 @@ typedef struct {
     uint8_t         data_bits;  // ej: 8
     UART_Paridad_t   paridad;
     UART_StopBits_t stop_bits;
+    uint32_t        pin_rx;     // pin rx
 } UART_Config_t;
 
 typedef enum{

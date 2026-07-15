@@ -1,31 +1,43 @@
 #ifndef CONFIG_ANALIZADOR_H
 #define CONFIG_ANALIZADOR_H
 
-#include "captura.h"
+#include <stdint.h>
+#include <stdbool.h>
+
 #include "uart.h"
+#include "spi.h"
+#include "i2c.h"
 
 typedef enum{
 	NONE,
-	UART
-	// SPI
-	// I2C
+	UART,
+	SPI,
+	I2C
 }Protocolo_t;
 
 typedef struct{
 	Protocolo_t protocolo_activo;
 	union{
-		UART_Config_T uart;
-		//SPI_Config_T spi;...
+		UART_Config_t uart;
+		spi_config_t spi;
+		i2c_config_t i2c;
 	}settings;
 }config_protocolo;
 
 typedef struct{
-	config_captura captura;
+	// config captura
+	uint32_t freq_muestreo;
+	uint32_t trigger_pin;
+	bool flanco; // 0: subida, 1: bajada
+	
+	// config protocolo
 	config_protocolo protocolo;
 }Config_Analizador_t;
 
 
 extern Config_Analizador_t config_global;
 
+// mapeo dinamico de disparo segun protocolo
+void Configurar_Disparo_Protocolo(void);
 
 #endif
