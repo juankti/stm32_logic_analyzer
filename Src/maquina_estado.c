@@ -1,6 +1,6 @@
 #include "maquina_estado.h"
 
-static Estado_t deviceState = ESTADO_IDLE;
+static Estado_t deviceState = ESTADO_READY;
 
 void Estado_FSM() {
 	switch(deviceState){
@@ -11,17 +11,33 @@ void Estado_FSM() {
             break;
 
         case ESTADO_CONFIG:
-        	//Conf_Captura(&config_global.captura);
+            Conf_Captura();
+            Init_Captura();
         	deviceState = ESTADO_CAPTURA;
             break;
 
         case ESTADO_CAPTURA:
-        	// nada, todo por hardware
+            if (Capture_IsFinished()) {
+                Stop_Captura();
+                deviceState = ESTADO_DECOD;
+            }
             break;
 
         case ESTADO_DECOD:
-            {
-                //UART_FSM((uint8_t*)buffer_states, NUM_MUESTRAS, &menu_config);
+            switch (config_global.protocolo.protocolo_activo) {
+            // acá para escalar, conviene usar punteros a funciones
+                case UART:
+                    UART_FSM((uint16_t*)buffer_states, NUM_MUESTRAS, &config_global.protocolo.settings.uart);
+                    break;
+                case SPI:
+                    SPI_FSM((uint16_t*)buffer_states, NUM_MUESTRAS, &config_global.protocolo.settings.spi);
+                    break;
+                case I2C:
+                    I2C_FSM((uint16_t*)buffer_states, NUM_MUESTRAS, &config_global.protocolo.settings.i2c);
+                    break;
+                case NONE:
+                default:
+                    break;
             }
             Update_Display_And_Log();
             deviceState = ESTADO_READY;

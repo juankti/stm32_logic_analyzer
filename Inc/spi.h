@@ -54,7 +54,6 @@ typedef struct {
     uint32_t bytes_decoded;      // total bytes
 } spi_decoder_ctx_t;
 
-void spi_decoder_init(spi_decoder_ctx_t *ctx, const spi_config_t *config);
-int32_t spi_decoder_process(spi_decoder_ctx_t *ctx, uint32_t *buffer_states, uint32_t *buffer_timestamps, uint32_t buffer_length);
+void SPI_FSM(uint16_t *buffer_states, uint32_t buffer_length, spi_config_t *config);
 
 #endif

@@ -48,7 +48,7 @@ extern "C" {
 
 /* Exported macro ------------------------------------------------------------*/
 /* USER CODE BEGIN EM */
-#define NUM_MUESTRAS 1000
+#define NUM_MUESTRAS 1024
 #define TIMER_FREQ_HZ (SystemCoreClock/(TIM2->PSC+1))
 /* USER CODE END EM */
 

@@ -36,7 +36,6 @@ typedef struct {
     uint32_t bytes_decoded;      // total bytes
 } i2c_decoder_ctx_t;
 
-void i2c_decoder_init(i2c_decoder_ctx_t *ctx, const i2c_config_t *config);
-int32_t i2c_decoder_process(i2c_decoder_ctx_t *ctx, uint32_t *buffer_states, uint32_t *buffer_timestamps, uint32_t buffer_length);
+void I2C_FSM(uint16_t *buffer_states, uint32_t buffer_length, i2c_config_t *config);
 
 #endif

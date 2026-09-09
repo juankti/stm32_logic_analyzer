@@ -15,18 +15,16 @@ void Conf_Captura(void){
 	DMA1_Stream6->CR = DMA_SxCR_CHSEL_1 | DMA_SxCR_CHSEL_0 |
 	                       DMA_SxCR_MINC |
 	                       DMA_SxCR_MSIZE_1 |
-	                       DMA_SxCR_PSIZE_1 |
-	                       DMA_SxCR_CIRC;
+	                       DMA_SxCR_PSIZE_1;
 
-	// dma2 (gpiob)
-	DMA2_Stream1->PAR = (uint32_t)&GPIOB->IDR;
+	// dma2 (gpioa)
+	DMA2_Stream1->PAR = (uint32_t)&GPIOA->IDR;
 	DMA2_Stream1->M0AR = (uint32_t)buffer_states;
 	DMA2_Stream1->NDTR = NUM_MUESTRAS;
 	DMA2_Stream1->CR = DMA_SxCR_CHSEL_1 | DMA_SxCR_CHSEL_2 |
 	                       DMA_SxCR_MINC |
-	                       0x00000000 |
-	                       0x00000000 |
-	                       DMA_SxCR_CIRC;
+	                       DMA_SxCR_MSIZE_0 |
+	                       DMA_SxCR_PSIZE_0;
 
 	// trigger de timer a dma
 	TIM1->DIER |= TIM_DIER_CC1DE;
@@ -35,8 +33,13 @@ void Conf_Captura(void){
 
 
 void Init_Captura() {
-	DMA1_Stream6->CR != DMA_SxCR_EN;
-	DMA2_Stream1->CR != DMA_SxCR_EN;
+	DMA1_Stream6->CR |= DMA_SxCR_EN;
+	DMA2_Stream1->CR |= DMA_SxCR_EN;
+    
+    // Habilitar los canales de captura
+    TIM1->CCER |= TIM_CCER_CC1E;
+    TIM2->CCER |= TIM_CCER_CC2E;
+    
 	TIM1->CR1 |= TIM_CR1_CEN;
 	TIM2->CR1 |= TIM_CR1_CEN;
 }
@@ -46,6 +49,14 @@ void Stop_Captura(){
 	DMA2_Stream1->CR &= ~DMA_SxCR_EN;
 	TIM1->CR1 &= ~TIM_CR1_CEN;
 	TIM2->CR1 &= ~TIM_CR1_CEN;
+    
+    // Deshabilitar canales de captura
+    TIM1->CCER &= ~TIM_CCER_CC1E;
+    TIM2->CCER &= ~TIM_CCER_CC2E;
+    
+    // Limpiar flags de interrupción
+    DMA1->HIFCR = DMA_HIFCR_CTCIF6; // Clear Transfer Complete Int Flag for Stream 6
+    DMA2->LIFCR = DMA_LIFCR_CTCIF1; // Clear Transfer Complete Int Flag for Stream 1
 }
 
 

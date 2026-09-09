@@ -25,6 +25,7 @@
 #include "maquina_estado.h"
 #include "uart.h"
 #include "captura.h"
+#include "config_analizador.h"
 
 
 /* USER CODE END Includes */
@@ -49,12 +50,11 @@
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 DMA_HandleTypeDef hdma_tim1_ch1;
-DMA_HandleTypeDef hdma_tim2_ch2_ch4;
 
 /* USER CODE BEGIN PV */
 
 volatile uint32_t buffer_timestamps[NUM_MUESTRAS];
-volatile uint8_t buffer_states[NUM_MUESTRAS];
+volatile uint16_t buffer_states[NUM_MUESTRAS];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -63,7 +63,6 @@ static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM2_Init(void);
-
 /* USER CODE BEGIN PFP */
 
 
@@ -74,22 +73,31 @@ static void MX_TIM2_Init(void);
 
 
 bool User_Pressed_Start(void) {
-    // Dummy implementation
-    return false;
+    // Dummy implementation: Forzamos a true para probar
+    return true;
 }
 
 void Hardware_Config_Trigger(void) {
-    // Dummy implementation
+    // Software Trigger ultrarrápido por polling
+    uint32_t mask = (1 << config_global.trigger_pin);
+    while((GPIOA->IDR & mask) != 0) {
+        // Bloqueante, esperando flanco de bajada
+    }
 }
 
 void Update_Display_And_Log(void) {
     // Dummy implementation
 }
 
-void Save_Decoded_Char(uint8_t c) {
-    // Dummy implementation
-}
+#define MAX_DECODED_CHARS 256
+volatile uint8_t decoded_buffer[MAX_DECODED_CHARS];
+volatile uint32_t decoded_idx = 0;
 
+void Save_Decoded_Char(uint8_t c) {
+    if (decoded_idx < MAX_DECODED_CHARS) {
+        decoded_buffer[decoded_idx++] = c;
+    }
+}
 
 /* USER CODE END 0 */
 
@@ -126,7 +134,12 @@ int main(void)
   MX_TIM1_Init();
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
+  config_global.protocolo.protocolo_activo = I2C;
+  config_global.protocolo.settings.i2c.pin_scl = 8;    // PA8 como SCL (OBLIGATORIO para DMA)
+  config_global.protocolo.settings.i2c.pin_sda = 9;    // PA9 como SDA
 
+
+  Configurar_Disparo_Protocolo();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -315,15 +328,11 @@ static void MX_DMA_Init(void)
   __HAL_RCC_DMA1_CLK_ENABLE();
 
   /* DMA interrupt init */
-  /* DMA1_Stream6_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream6_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Stream6_IRQn);
   /* DMA2_Stream1_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA2_Stream1_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA2_Stream1_IRQn);
+  // HAL_NVIC_SetPriority(DMA2_Stream1_IRQn, 0, 0);
+  // HAL_NVIC_EnableIRQ(DMA2_Stream1_IRQn);
 
 }
-
 
 /**
   * @brief GPIO Initialization Function
@@ -341,10 +350,10 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
-  /*Configure GPIO pins : PA0 PA1 PA2 PA3
-                           PA4 PA5 PA6 PA7 */
-  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2|GPIO_PIN_3
-                          |GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7;
+  /*Configure GPIO pins : PA9 PA10 PA11 PA12
+                           PA15 */
+  GPIO_InitStruct.Pin = GPIO_PIN_9|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12
+                          |GPIO_PIN_15;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);

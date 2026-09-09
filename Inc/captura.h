@@ -12,6 +12,6 @@ struct Config_Analizador_t; // Forward declaration si es necesario, o incluimos 
 void Conf_Captura(void); // Asumimos que usa config_global internamente o adaptamos la firma si es necesario.
 void Init_Captura();
 void Stop_Captura();
-bool Captura_Full();
+bool Capture_IsFinished(void);
 
 #endif
