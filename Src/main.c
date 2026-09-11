@@ -26,6 +26,9 @@
 #include "uart.h"
 #include "captura.h"
 #include "config_analizador.h"
+#include "disp_driver.h"
+#include "touch_driver.h"
+#include "interface.h"
 
 
 /* USER CODE END Includes */
@@ -47,9 +50,13 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+SPI_HandleTypeDef hspi1;
+DMA_HandleTypeDef hdma_spi1_tx;
+
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 DMA_HandleTypeDef hdma_tim1_ch1;
+DMA_HandleTypeDef hdma_tim2_ch2_ch4;
 
 /* USER CODE BEGIN PV */
 
@@ -63,6 +70,7 @@ static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_SPI1_Init(void);
 /* USER CODE BEGIN PFP */
 
 
@@ -73,8 +81,10 @@ static void MX_TIM2_Init(void);
 
 
 bool User_Pressed_Start(void) {
-    // Dummy implementation: Forzamos a true para probar
-    return true;
+    // IMPORTANTE: Si esto es 'true' siempre, el sistema saltará directo a capturar
+    // y se quedará bloqueado en el Trigger si no hay señal. 
+    // Lo ponemos en 'false' para que puedas ver el menú en pantalla.
+    return false;
 }
 
 void Hardware_Config_Trigger(void) {
@@ -85,8 +95,42 @@ void Hardware_Config_Trigger(void) {
     }
 }
 
+volatile uint8_t touch_event_occurred = 0;
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+    if (GPIO_Pin == TOUCH_INT_Pin) {
+        touch_event_occurred = 1;
+    }
+}
+
 void Update_Display_And_Log(void) {
-    // Dummy implementation
+    // 1. Configuramos la estructura de captura para la interfaz
+    capture.active_channels = 6;
+    capture.total_samples = NUM_MUESTRAS;
+
+    // Obtener los labels de la configuración actual
+    const ProtocolPinConfig_t *cfg = Config_GetPinConfig(conf.protocol);
+    for (uint8_t ch = 0; ch < LOGIC_NUM_CHANNELS; ch++) {
+        capture.channel_labels[ch] = cfg->channels[ch].label;
+    }
+
+    // 2. Extraer los datos de buffer_states (16 bits) al arreglo de la interfaz (1 byte por canal)
+    for (uint16_t i = 0; i < NUM_MUESTRAS; i++) {
+        uint16_t state = buffer_states[i];
+        for (uint8_t ch = 0; ch < LOGIC_NUM_CHANNELS; ch++) {
+            // Suponemos que los canales corresponden a los primeros pines configurados
+            // Si están en orden distinto, se puede usar cfg->channels[ch].pin como máscara
+            uint16_t pin_mask = cfg->channels[ch].pin;
+            capture.samples[ch][i] = (state & pin_mask) ? 1 : 0;
+        }
+    }
+
+    // 3. Forzar el refresco de la vista de ondas
+    viewer_scroll = 0;
+    viewer_zoom = 1;
+    viewer_needs_full_redraw = 1;
+    current_state = STATE_VIEWER;
+    needs_refresh = 1;
 }
 
 #define MAX_DECODED_CHARS 256
@@ -133,13 +177,17 @@ int main(void)
   MX_DMA_Init();
   MX_TIM1_Init();
   MX_TIM2_Init();
+  MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
-  config_global.protocolo.protocolo_activo = I2C;
-  config_global.protocolo.settings.i2c.pin_scl = 8;    // PA8 como SCL (OBLIGATORIO para DMA)
-  config_global.protocolo.settings.i2c.pin_sda = 9;    // PA9 como SDA
+  config_global.protocolo.protocolo_activo = UART;
+  config_global.protocolo.settings.uart.baudrate = 9600;
+  // Suponiendo que el Trigger (flanco de bajada) ocurre en el pin RX
+  config_global.trigger_pin = 8; // Pin 10 (PA10 = RX)
 
 
   Configurar_Disparo_Protocolo();
+  DISP_Init();
+  DISP_FillRect(0, 0, 240, 320, COLOR_BG_DARK);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -147,6 +195,60 @@ int main(void)
   while (1)
   {
     Estado_FSM();
+
+    // --- Manejo del renderizado UI ---
+    if (needs_refresh) {
+        switch (current_state) {
+            case STATE_MAIN_MENU:
+                Draw_MainMenu();
+                break;
+            case STATE_VIEWER:
+                Draw_Viewer();
+                break;
+            case STATE_SETTINGS:
+                Draw_Settings();
+                break;
+        }
+        needs_refresh = 0;
+    }
+
+    // --- Manejo de la lógica táctil ---
+    if (touch_event_occurred || TS_State.is_pressed || TS_State.just_released) {
+        TOUCH_Update();
+
+        uint16_t px = TS_State.pressed_x;
+        uint16_t py = TS_State.pressed_y;
+        View_t *active_view = &views[current_state];
+
+        if (active_view->buttons != NULL && active_view->buttonCount > 0) {
+            if (TS_State.is_pressed) {
+                for (uint8_t i = 0; i < active_view->buttonCount; i++) {
+                    Button_t *btn = &active_view->buttons[i];
+                    uint8_t was_active = btn->isActive;
+
+                    UI_HandleActive(btn, px, py);
+
+                    if (btn->isActive != was_active) {
+                        UI_DrawButton(btn);
+                    }
+                }
+            }
+            
+            if (TS_State.just_released) {
+                for (uint8_t i = 0; i < active_view->buttonCount; i++) {
+                    Button_t *btn = &active_view->buttons[i];
+                    if (btn->isActive) {
+                        btn->isActive = 0;
+                        UI_DrawButton(btn);
+                        if (btn->onClick != NULL) {
+                            btn->onClick();
+                        }
+                    }
+                }
+                touch_event_occurred = 0;
+            }
+        }
+    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -198,6 +300,44 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief SPI1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI1_Init(void)
+{
+
+  /* USER CODE BEGIN SPI1_Init 0 */
+
+  /* USER CODE END SPI1_Init 0 */
+
+  /* USER CODE BEGIN SPI1_Init 1 */
+
+  /* USER CODE END SPI1_Init 1 */
+  /* SPI1 parameter configuration*/
+  hspi1.Instance = SPI1;
+  hspi1.Init.Mode = SPI_MODE_MASTER;
+  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.NSS = SPI_NSS_SOFT;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi1.Init.CRCPolynomial = 10;
+  if (HAL_SPI_Init(&hspi1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI1_Init 2 */
+
+  /* USER CODE END SPI1_Init 2 */
+
 }
 
 /**
@@ -303,7 +443,7 @@ static void MX_TIM2_Init(void)
   {
     Error_Handler();
   }
-  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_BOTHEDGE;
+  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
   sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
   sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
   sConfigIC.ICFilter = 0;
@@ -328,9 +468,15 @@ static void MX_DMA_Init(void)
   __HAL_RCC_DMA1_CLK_ENABLE();
 
   /* DMA interrupt init */
+  /* DMA1_Stream6_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream6_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream6_IRQn);
   /* DMA2_Stream1_IRQn interrupt configuration */
-  // HAL_NVIC_SetPriority(DMA2_Stream1_IRQn, 0, 0);
-  // HAL_NVIC_EnableIRQ(DMA2_Stream1_IRQn);
+  HAL_NVIC_SetPriority(DMA2_Stream1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream1_IRQn);
+  /* DMA2_Stream3_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream3_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream3_IRQn);
 
 }
 
@@ -350,13 +496,33 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
-  /*Configure GPIO pins : PA9 PA10 PA11 PA12
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, TOUCH_CS_Pin|DISP_CS_Pin|DISP_RST_Pin|DISP_DC_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pins : TOUCH_CS_Pin DISP_CS_Pin DISP_RST_Pin DISP_DC_Pin */
+  GPIO_InitStruct.Pin = TOUCH_CS_Pin|DISP_CS_Pin|DISP_RST_Pin|DISP_DC_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : TOUCH_INT_Pin */
+  GPIO_InitStruct.Pin = TOUCH_INT_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(TOUCH_INT_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : DISP_DCA9_Pin PA10 PA11 PA12
                            PA15 */
-  GPIO_InitStruct.Pin = GPIO_PIN_9|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12
+  GPIO_InitStruct.Pin = DISP_DCA9_Pin|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12
                           |GPIO_PIN_15;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI1_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
