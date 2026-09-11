@@ -85,7 +85,7 @@ void DISP_Init(void) {
 
     // 4. Memory Access Control (Orientation & Color Order)
     DISP_WriteCommand(0x36);
-    DISP_WriteData(0x48);    // 0x48 = Portrait mode, BGR color order (standard for most ILI9341 boards)
+    DISP_WriteData(0x28);    // 0x28 = Landscape mode (MV=1, BGR=1)
 
     // 5. Pixel Format Set
     DISP_WriteCommand(0x3A);

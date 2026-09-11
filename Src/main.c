@@ -216,8 +216,8 @@ int main(void)
     if (touch_event_occurred || TS_State.is_pressed || TS_State.just_released) {
         TOUCH_Update();
 
-        uint16_t px = TS_State.pressed_x;
-        uint16_t py = TS_State.pressed_y;
+        uint16_t px = TS_State.x;
+        uint16_t py = TS_State.y;
         View_t *active_view = &views[current_state];
 
         if (active_view->buttons != NULL && active_view->buttonCount > 0) {

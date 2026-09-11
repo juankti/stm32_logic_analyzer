@@ -60,6 +60,19 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define TOUCH_CS_Pin GPIO_PIN_0
+#define TOUCH_CS_GPIO_Port GPIOA
+#define TOUCH_INT_Pin GPIO_PIN_1
+#define TOUCH_INT_GPIO_Port GPIOA
+#define TOUCH_INT_EXTI_IRQn EXTI1_IRQn
+#define DISP_CS_Pin GPIO_PIN_2
+#define DISP_CS_GPIO_Port GPIOA
+#define DISP_RST_Pin GPIO_PIN_3
+#define DISP_RST_GPIO_Port GPIOA
+#define DISP_DC_Pin GPIO_PIN_4
+#define DISP_DC_GPIO_Port GPIOA
+#define DISP_DCA9_Pin GPIO_PIN_9
+#define DISP_DCA9_GPIO_Port GPIOA
 
 /* USER CODE BEGIN Private defines */
 

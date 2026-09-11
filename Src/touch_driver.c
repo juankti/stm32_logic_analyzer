@@ -1,7 +1,7 @@
 #include "touch_driver.h"
 #include "disp_driver.h"
 #include "spi_manager.h"
-#define TOUCH_SAMPLES 8
+#define TOUCH_SAMPLES 15
 
 TouchState_t TS_State = {0, 0, 0,0,0};
 extern SPI_HandleTypeDef hspi1;
@@ -11,27 +11,55 @@ extern SPI_HandleTypeDef hspi1;
 
 uint8_t was_pressed = 0;
 static uint16_t TOUCH_ReadADC_Raw(uint8_t cmd) {
-    uint8_t rx[2] = {0};
+    uint8_t tx[3] = {cmd, 0x00, 0x00};
+    uint8_t rx[3] = {0};
 
-    HAL_SPI_Transmit(&hspi1, &cmd, 1, 10);
-    HAL_SPI_Receive(&hspi1, rx, 2, 10);
+    // Usar TransmitReceive para no tener interrupciones en la señal de reloj
+    HAL_SPI_TransmitReceive(&hspi1, tx, rx, 3, 10);
 
-    return ((rx[0] << 8) | rx[1]) >> 4;
+    // rx[0] es basura (mientras se envía el comando), la data real de 12 bits está en rx[1] y rx[2]
+    return ((rx[1] << 8) | rx[2]) >> 4;
 }
 
-
 static uint16_t TOUCH_ReadADC_Average(uint8_t command) {
+    uint16_t samples[TOUCH_SAMPLES];
     uint32_t sum = 0;
 
     SPI_Bus_Select(SPI_DEV_TOUCH);
 
-    for (uint8_t i = 0; i < TOUCH_SAMPLES; i++) {
-        sum += TOUCH_ReadADC_Raw(command);
-    }
+    // 1. Dummy read
+    TOUCH_ReadADC_Raw(command);
 
+    // 2. Tomar muestras
+    for (uint8_t i = 0; i < TOUCH_SAMPLES; i++) {
+        samples[i] = TOUCH_ReadADC_Raw(command);
+    }
     SPI_Bus_Deselect();
 
-    return (uint16_t)(sum / TOUCH_SAMPLES);
+    // 3. Ordenar arreglo (Bubble Sort)
+    for (uint8_t i = 0; i < TOUCH_SAMPLES - 1; i++) {
+        for (uint8_t j = i + 1; j < TOUCH_SAMPLES; j++) {
+            if (samples[i] > samples[j]) {
+                uint16_t temp = samples[i];
+                samples[i] = samples[j];
+                samples[j] = temp;
+            }
+        }
+    }
+
+    // 4. Chequeo de varianza en el bloque central (índices 4 a 10)
+    // Si la diferencia entre el valor central más alto y más bajo es muy grande,
+    // significa que el dedo rebotó o la lectura es basura.
+    if ((samples[10] - samples[4]) > 50) {
+        return 0; // Retornamos 0 indicando error/ruido
+    }
+
+    // 5. Promediar estrictamente el núcleo central (7 muestras)
+    for (uint8_t i = 4; i < 11; i++) {
+        sum += samples[i];
+    }
+
+    return (uint16_t)(sum / 7);
 }
 
 
@@ -51,11 +79,13 @@ void TOUCH_GetCalibratedPoint(uint16_t raw_x, uint16_t raw_y, uint16_t *cal_x, u
     if (y < TOUCH_Y_MIN) y = TOUCH_Y_MIN;
     if (y > TOUCH_Y_MAX) y = TOUCH_Y_MAX;
 
-    // 2. Mapear X (Escalar de TOUCH_X_MIN..TOUCH_X_MAX a 0..DISP_WIDTH)
-    *cal_x = (uint16_t)(((x - TOUCH_X_MIN) * DISP_WIDTH) / (TOUCH_X_MAX - TOUCH_X_MIN));
+    // Landscape mapping (Rotado 90 grados a la derecha):
+    // El táctil también rota 90°.
+    // Asignamos el ADC Y (raw_y) al eje X lógico de la pantalla e invertimos (espejo)
+    *cal_x = (uint16_t)(((TOUCH_Y_MAX - y) * DISP_WIDTH) / (TOUCH_Y_MAX - TOUCH_Y_MIN));
 
-    // 3. Mapear Y (Como el eje Y está invertido en el sensor, mapeamos invertido: Y_MAX es 0, Y_MIN es DISP_HEIGHT)
-    *cal_y = (uint16_t)(((TOUCH_Y_MAX - y) * DISP_HEIGHT) / (TOUCH_Y_MAX - TOUCH_Y_MIN));
+    // Asignamos el ADC X (raw_x) al eje Y lógico de la pantalla e invertimos (espejo)
+    *cal_y = (uint16_t)(((TOUCH_X_MAX - x) * DISP_HEIGHT) / (TOUCH_X_MAX - TOUCH_X_MIN));
 }
 
 
@@ -69,12 +99,18 @@ void TOUCH_Update(void) {
         uint16_t raw_x = TOUCH_ReadADC_Average(CMD_RDX);
         uint16_t raw_y = TOUCH_ReadADC_Average(CMD_RDY);
 
-        TOUCH_GetCalibratedPoint(raw_x, raw_y, &TS_State.x, &TS_State.y);
-        TS_State.is_pressed = 1;
+        if (raw_x != 0 && raw_y != 0) {
+            TOUCH_GetCalibratedPoint(raw_x, raw_y, &TS_State.x, &TS_State.y);
+            TS_State.is_pressed = 1;
 
-        if (TS_State.just_pressed) {
-            TS_State.pressed_x = TS_State.x;
-            TS_State.pressed_y = TS_State.y;
+            if (TS_State.just_pressed) {
+                TS_State.pressed_x = TS_State.x;
+                TS_State.pressed_y = TS_State.y;
+            }
+        } else {
+            // Lectura rechazada por varianza alta (ruido). 
+            // Seguimos considerando que está pulsado para no cortar el arrastre.
+            TS_State.is_pressed = 1;
         }
     } else {
         TS_State.is_pressed = 0;

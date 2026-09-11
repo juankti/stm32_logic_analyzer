@@ -13,7 +13,7 @@ uint8_t needs_refresh = 1;
 
 // Waveform viewer layout
 #define WAVE_Y_START      18
-#define WAVE_Y_END        290
+#define WAVE_Y_END        (DISP_HEIGHT - 30)
 #define WAVE_AREA_HEIGHT  (WAVE_Y_END - WAVE_Y_START)
 #define LANE_HEIGHT       (WAVE_AREA_HEIGHT / LOGIC_NUM_CHANNELS)
 #define LABEL_WIDTH       32
@@ -52,13 +52,13 @@ Button_t settings_buttons[SETTINGS_CONF_SIZE] = {
 };
 
 // Viewer Buttons
-#define VIEWER_BTN_W 48
+#define VIEWER_BTN_W (DISP_WIDTH / 5)
 Button_t viewer_buttons[5] = {
-    {0,                    290, VIEWER_BTN_W, 30, COLOR_UI_BTN, "<",    OnScrollLeftClick,  0},
-    {VIEWER_BTN_W,         290, VIEWER_BTN_W, 30, COLOR_UI_BTN, ">",    OnScrollRightClick, 0},
-    {VIEWER_BTN_W * 2,     290, VIEWER_BTN_W, 30, COLOR_UI_BTN, "Z-",   OnZoomInClick,      0},
-    {VIEWER_BTN_W * 3,     290, VIEWER_BTN_W, 30, COLOR_UI_BTN, "Z+",   OnZoomOutClick,     0},
-    {VIEWER_BTN_W * 4,     290, VIEWER_BTN_W, 30, COLOR_UI_BTN, "Back", OnBackClick,        0},
+    {VIEWER_BTN_W * 0, DISP_HEIGHT - 30, VIEWER_BTN_W, 30, COLOR_UI_BTN, "<",    OnScrollLeftClick,  0},
+    {VIEWER_BTN_W * 1, DISP_HEIGHT - 30, VIEWER_BTN_W, 30, COLOR_UI_BTN, ">",    OnScrollRightClick, 0},
+    {VIEWER_BTN_W * 2, DISP_HEIGHT - 30, VIEWER_BTN_W, 30, COLOR_UI_BTN, "Z-",   OnZoomInClick,      0},
+    {VIEWER_BTN_W * 3, DISP_HEIGHT - 30, VIEWER_BTN_W, 30, COLOR_UI_BTN, "Z+",   OnZoomOutClick,     0},
+    {VIEWER_BTN_W * 4, DISP_HEIGHT - 30, VIEWER_BTN_W, 30, COLOR_UI_BTN, "Back", OnBackClick,        0},
 };
 
 View_t views[] = {
