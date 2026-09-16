@@ -1,5 +1,6 @@
 #include "captura.h"
 #include "config_analizador.h"
+#include "interface_conf.h"
 
 void Conf_Captura(void){
 	// detener timers y dma
@@ -7,6 +8,20 @@ void Conf_Captura(void){
 	DMA2_Stream1->CR &= ~DMA_SxCR_EN;
 	TIM1->CR1 &= ~TIM_CR1_CEN;
 	TIM2->CR1 &= ~TIM_CR1_CEN;
+
+    uint32_t prescaler = 83; // 1MHz default (84MHz/84)
+    switch(conf.frequency) {
+        case kHz100: prescaler = 839; break; // 100KHz
+        case kHz400: prescaler = 209; break; // 400KHz
+        case kHz20:  prescaler = 4199; break; // 20KHz
+        case MHz1:   prescaler = 83; break;  // 1MHz
+    }
+    TIM1->PSC = prescaler;
+    TIM2->PSC = prescaler;
+    
+    // Forzar actualización para que el nuevo prescaler aplique INMEDIATAMENTE.
+    TIM1->EGR = TIM_EGR_UG;
+    TIM2->EGR = TIM_EGR_UG;
 
 	// dma1 (timestamps)
 	DMA1_Stream6->PAR = (uint32_t)&TIM2->CCR2;
@@ -29,10 +44,20 @@ void Conf_Captura(void){
 	// trigger de timer a dma
 	TIM1->DIER |= TIM_DIER_CC1DE;
 	TIM2->DIER |= TIM_DIER_CC2DE;
+
+    // Configurar ambos timers para capturar en AMBOS flancos (RISING y FALLING)
+    // Esto es vital para UART (transiciones asíncronas). 
+    TIM1->CCER |= (TIM_CCER_CC1P | TIM_CCER_CC1NP);
+    TIM2->CCER |= (TIM_CCER_CC2P | TIM_CCER_CC2NP);
 }
 
 
 void Init_Captura() {
+    TIM1->CNT = 0;
+    TIM2->CNT = 0;
+    DMA1->HIFCR = DMA_HIFCR_CTCIF6; // Clear TCIF6
+    DMA2->LIFCR = DMA_LIFCR_CTCIF1; // Clear TCIF1
+
 	DMA1_Stream6->CR |= DMA_SxCR_EN;
 	DMA2_Stream1->CR |= DMA_SxCR_EN;
     

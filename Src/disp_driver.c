@@ -265,40 +265,9 @@ void DISP_CloseStream(void) {
 
 void DISP_DrawString(uint16_t x, uint16_t y, const char *str, uint16_t fg, uint16_t bg) {
     uint16_t len = 0;
-    while (str[len] != '\0') len++;
-    if (len == 0) return;
-
-    uint16_t total_w = len * 8;
-    DISP_SetAddressWindow(x, y, x + total_w - 1, y + 11);
-
-    SPI_Bus_Select(SPI_DEV_DISPLAY);
-    HAL_GPIO_WritePin(DISP_DC_GPIO_Port, DISP_DC_Pin, GPIO_PIN_SET);
-
-    uint8_t fg_h = fg >> 8, fg_l = fg & 0xFF;
-    uint8_t bg_h = bg >> 8, bg_l = bg & 0xFF;
-
-    uint8_t char_buffer[8 * 12 * 2];
-
-    for (uint16_t c = 0; c < len; c++) {
-        const char* glyph = font[(uint8_t)str[c]];
-        uint16_t buf_idx = 0;
-
-        for (uint8_t row = 0; row < 12; row++) {
-            uint8_t line = (uint8_t)glyph[row];
-            for (uint8_t col = 0; col < 8; col++) {
-                if (line & (1 << col)) {
-                    char_buffer[buf_idx++] = fg_h;
-                    char_buffer[buf_idx++] = fg_l;
-                } else {
-                    char_buffer[buf_idx++] = bg_h;
-                    char_buffer[buf_idx++] = bg_l;
-                }
-            }
-        }
-
-        HAL_SPI_Transmit(&hspi1, char_buffer, sizeof(char_buffer), HAL_MAX_DELAY);
+    while (str[len] != '\0') {
+        DISP_DrawChar(x + (len * 8), y, str[len], fg, bg);
+        len++;
     }
-
-    SPI_Bus_Deselect();
 }
 

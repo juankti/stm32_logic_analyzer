@@ -13,7 +13,7 @@
 #define COLOR_BG_DARK     0x10A2  /* Very dark charcoal background */
 #define COLOR_BG_DARKER   0x0842  /* Darker panel background */
 #define COLOR_SIG_HIGH    0x07E0  /* Bright green - logic HIGH */
-#define COLOR_SIG_LOW     0x02B2  /* Dim blue - logic LOW */
+#define COLOR_SIG_LOW     0x07E0  /* Bright green - logic LOW */
 #define COLOR_SIG_LABEL   0xFFFF  /* White - channel labels */
 #define COLOR_SIG_SEP     0x2104  /* Subtle dark gray separator */
 #define COLOR_UI_BTN      0x2945  /* Dark blue-gray button */
@@ -31,6 +31,8 @@ typedef enum {
 	STATE_MAIN_MENU,
 	STATE_VIEWER,
 	STATE_SETTINGS,
+	STATE_PROTOCOL_CONFIG,
+	STATE_TABLE_VIEW,
 } AppState_t;
 
 // Views
@@ -50,7 +52,9 @@ typedef struct {
 extern CaptureBuffer_t capture;
 extern int16_t viewer_scroll;
 extern uint8_t viewer_zoom;
+extern int16_t table_scroll;
 extern uint8_t viewer_needs_full_redraw;
+extern uint8_t encoder_zoom_mode;
 
 extern AppState_t current_state;
 extern uint8_t needs_refresh;
@@ -58,6 +62,8 @@ extern uint8_t needs_refresh;
 extern Button_t main_menu_buttons[];
 extern Button_t settings_buttons[];
 extern Button_t viewer_buttons[];
+extern Button_t protocol_config_buttons[];
+extern Button_t table_view_buttons[];
 extern View_t views[];
 
 // Buttons callbacks
@@ -65,18 +71,31 @@ void OnOptionsClick(void);
 void OnRedClick(void);
 void OnCaptureClick(void);
 void OnBackClick(void);
+void OnConfigClick(void);
+void OnTableClick(void);
+void OnModeToggleClick(void);
+void OnConfigBackClick(void);
+void OnDecodeClick(void);
+void OnSettingClick(void);
+void OnUARTParamsClick(void);
 
 void OnScrollLeftClick(void);
 void OnScrollRightClick(void);
+void OnEncoderScrollLeft(void);
+void OnEncoderScrollRight(void);
 void OnZoomInClick(void);
 void OnZoomOutClick(void);
 
 void OnProtocolClick(void);
 void OnFreqClick(void);
+void OnTriggerClick(void);
+void OnRadixClick(void);
 
 // Views callbacks
 void Draw_MainMenu();
 void Draw_Viewer();
 void Draw_Settings();
+void Draw_ProtocolConfig();
+void Draw_TableView();
 
 #endif

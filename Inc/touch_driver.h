@@ -15,5 +15,6 @@ typedef struct {
 extern TouchState_t TS_State;
 extern volatile uint8_t touch_event_occurred;
 
+void TOUCH_Init(void);
 void TOUCH_Update(void);
 #endif

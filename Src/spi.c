@@ -3,12 +3,13 @@
 
 extern volatile uint8_t decoded_buffer[];
 extern volatile uint32_t decoded_idx;
-extern void Save_Decoded_Char(uint8_t c);
+extern void Save_Decoded_Char(uint8_t c, uint32_t start_idx, uint32_t end_idx);
 
 void SPI_FSM(uint16_t *buffer_states, uint32_t buffer_length, spi_config_t *config) {
     uint8_t current_byte = 0;
     uint8_t bit_counter = 0;
-    uint16_t prev_state = 0xFFFF; // Asumir alto inicialmente
+    uint16_t prev_state = 0xFFFF;
+    uint32_t packet_start_idx = 0; // Asumir alto inicialmente
     
     decoded_idx = 0; // Limpiar buffer de salida
 
@@ -20,7 +21,8 @@ void SPI_FSM(uint16_t *buffer_states, uint32_t buffer_length, spi_config_t *conf
         bool prev_sck_state = (prev_state & (1 << config->pin_sck)) ? 1 : 0;
         bool mosi_state = (current_state & (1 << config->pin_mosi)) ? 1 : 0;
         
-        if (cs_state == 1) {
+        if (bit_counter == 0) packet_start_idx = i;
+            if (cs_state == 1) {
             // CS está inactivo, reiniciar estado
             bit_counter = 0;
             current_byte = 0;
@@ -39,7 +41,7 @@ void SPI_FSM(uint16_t *buffer_states, uint32_t buffer_length, spi_config_t *conf
                 
                 if (bit_counter >= config->data_size) {
                     // Guardar byte ensamblado
-                    Save_Decoded_Char(current_byte);
+                    Save_Decoded_Char(current_byte, packet_start_idx, i);
                     bit_counter = 0;
                     current_byte = 0;
                 }

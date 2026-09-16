@@ -4,13 +4,14 @@
 extern volatile uint8_t decoded_buffer[];
 extern volatile uint32_t decoded_idx;
 extern volatile uint32_t buffer_timestamps[];
-extern void Save_Decoded_Char(uint8_t c);
+extern void Save_Decoded_Char(uint8_t c, uint32_t start_idx, uint32_t end_idx);
 
 void I2C_FSM(uint16_t *buffer_states, uint32_t buffer_length, i2c_config_t *config) {
     uint8_t current_byte = 0;
     uint8_t bit_counter = 0;
     uint16_t prev_state = 0xFFFF; // Asumir SCL y SDA en alto inicialmente (idle)
     uint32_t prev_time = 0;
+    uint32_t packet_start_idx = 0;
     
     decoded_idx = 0; // Limpiar buffer de salida
 
@@ -38,7 +39,7 @@ void I2C_FSM(uint16_t *buffer_states, uint32_t buffer_length, i2c_config_t *conf
             } else {
                 // Hemos llegado al bit 9 (ACK/NACK)
                 // Ignoramos el valor del ACK y guardamos el byte
-                Save_Decoded_Char(current_byte);
+                Save_Decoded_Char(current_byte, packet_start_idx, i);
                 bit_counter = 0;
                 current_byte = 0;
             }

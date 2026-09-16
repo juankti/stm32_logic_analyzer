@@ -49,7 +49,7 @@ extern "C" {
 /* Exported macro ------------------------------------------------------------*/
 /* USER CODE BEGIN EM */
 #define NUM_MUESTRAS 1024
-#define TIMER_FREQ_HZ (SystemCoreClock/(TIM2->PSC+1))
+#define TIMER_FREQ_HZ (84000000/(TIM2->PSC+1))
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/
@@ -75,6 +75,9 @@ void Error_Handler(void);
 #define DISP_DCA9_GPIO_Port GPIOA
 
 /* USER CODE BEGIN Private defines */
+#define ENCODER_SW_Pin GPIO_PIN_0
+#define ENCODER_SW_GPIO_Port GPIOB
+
 
 
 uint32_t Calculate_Samples_Per_Bit(uint32_t baudrate);
@@ -82,7 +85,7 @@ bool User_Pressed_Start(void);
 void Hardware_Config_Trigger(void);
 void Update_Display_And_Log(void);
 void Log_Error(const char* msg);
-void Save_Decoded_Char(uint8_t c);
+void Save_Decoded_Char(uint8_t c, uint32_t start_idx, uint32_t end_idx);
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

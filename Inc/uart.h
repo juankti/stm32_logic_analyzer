@@ -24,6 +24,8 @@ typedef struct {
     UART_Paridad_t   paridad;
     UART_StopBits_t stop_bits;
     uint32_t        pin_rx;     // pin rx
+    uint8_t         lsb_first;  // 1: LSB first, 0: MSB first
+    uint8_t         inverted;   // 1: inverted logic, 0: normal
 } UART_Config_t;
 
 typedef enum{

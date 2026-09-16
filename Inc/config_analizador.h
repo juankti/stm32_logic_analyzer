@@ -28,7 +28,7 @@ typedef struct{
 	// config captura
 	uint32_t freq_muestreo;
 	uint32_t trigger_pin;
-	bool flanco; // 0: subida, 1: bajada
+	uint8_t flanco; // 0: subida, 1: bajada, 2: none
 	
 	// config protocolo
 	config_protocolo protocolo;

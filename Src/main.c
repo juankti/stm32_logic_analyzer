@@ -55,6 +55,7 @@ DMA_HandleTypeDef hdma_spi1_tx;
 
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim3;
 DMA_HandleTypeDef hdma_tim1_ch1;
 DMA_HandleTypeDef hdma_tim2_ch2_ch4;
 
@@ -69,7 +70,9 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_TIM1_Init(void);
+
 static void MX_TIM2_Init(void);
+static void MX_TIM3_Init(void);
 static void MX_SPI1_Init(void);
 /* USER CODE BEGIN PFP */
 
@@ -81,17 +84,23 @@ static void MX_SPI1_Init(void);
 
 
 bool User_Pressed_Start(void) {
-    // IMPORTANTE: Si esto es 'true' siempre, el sistema saltará directo a capturar
-    // y se quedará bloqueado en el Trigger si no hay señal. 
-    // Lo ponemos en 'false' para que puedas ver el menú en pantalla.
+    extern volatile bool start_capture_flag;
+    if (start_capture_flag) {
+        start_capture_flag = false;
+        return true;
+    }
     return false;
 }
 
 void Hardware_Config_Trigger(void) {
+    if (config_global.flanco == 2) return; // NONE
+    
     // Software Trigger ultrarrápido por polling
     uint32_t mask = (1 << config_global.trigger_pin);
-    while((GPIOA->IDR & mask) != 0) {
-        // Bloqueante, esperando flanco de bajada
+    if (config_global.flanco == 1) {
+        while((GPIOA->IDR & mask) != 0) { } // FALLING
+    } else {
+        while((GPIOA->IDR & mask) == 0) { } // RISING
     }
 }
 
@@ -100,6 +109,21 @@ volatile uint8_t touch_event_occurred = 0;
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
     if (GPIO_Pin == TOUCH_INT_Pin) {
         touch_event_occurred = 1;
+    }
+    if (GPIO_Pin == ENCODER_SW_Pin) {
+        static uint32_t press_time = 0;
+        uint32_t current_time = HAL_GetTick();
+        if (HAL_GPIO_ReadPin(ENCODER_SW_GPIO_Port, ENCODER_SW_Pin) == GPIO_PIN_RESET) {
+            press_time = current_time;
+        } else {
+            if (current_time - press_time > 1000) {
+                extern void OnTableClick(void);
+                OnTableClick();
+            } else if (current_time - press_time > 50) {
+                extern void OnModeToggleClick(void);
+                OnModeToggleClick();
+            }
+        }
     }
 }
 
@@ -129,7 +153,7 @@ void Update_Display_And_Log(void) {
     viewer_scroll = 0;
     viewer_zoom = 1;
     viewer_needs_full_redraw = 1;
-    current_state = STATE_VIEWER;
+    current_state = STATE_MAIN_MENU;
     needs_refresh = 1;
 }
 
@@ -137,9 +161,31 @@ void Update_Display_And_Log(void) {
 volatile uint8_t decoded_buffer[MAX_DECODED_CHARS];
 volatile uint32_t decoded_idx = 0;
 
-void Save_Decoded_Char(uint8_t c) {
-    if (decoded_idx < MAX_DECODED_CHARS) {
-        decoded_buffer[decoded_idx++] = c;
+volatile uint16_t decoded_start_indices[MAX_DECODED_CHARS];
+volatile uint16_t decoded_end_indices[MAX_DECODED_CHARS];
+
+volatile uint32_t decoded_start_timestamps[MAX_DECODED_CHARS];
+volatile uint32_t decoded_end_timestamps[MAX_DECODED_CHARS];
+
+void Save_Decoded_Char(uint8_t c, uint32_t start_idx, uint32_t end_idx) {
+    if (decoded_idx < 64) {
+        decoded_buffer[decoded_idx] = c;
+        decoded_start_indices[decoded_idx] = start_idx;
+        decoded_end_indices[decoded_idx] = end_idx;
+        decoded_start_timestamps[decoded_idx] = buffer_timestamps[start_idx];
+        decoded_end_timestamps[decoded_idx] = buffer_timestamps[end_idx];
+        decoded_idx++;
+    }
+}
+
+void Save_Decoded_Char_With_Times(uint8_t c, uint32_t start_idx, uint32_t end_idx, uint32_t t_start, uint32_t t_end) {
+    if (decoded_idx < 64) {
+        decoded_buffer[decoded_idx] = c;
+        decoded_start_indices[decoded_idx] = start_idx;
+        decoded_end_indices[decoded_idx] = end_idx;
+        decoded_start_timestamps[decoded_idx] = t_start;
+        decoded_end_timestamps[decoded_idx] = t_end;
+        decoded_idx++;
     }
 }
 
@@ -177,23 +223,54 @@ int main(void)
   MX_DMA_Init();
   MX_TIM1_Init();
   MX_TIM2_Init();
+  MX_TIM3_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
   config_global.protocolo.protocolo_activo = UART;
   config_global.protocolo.settings.uart.baudrate = 9600;
+  config_global.protocolo.settings.uart.data_bits = 8;
+  config_global.protocolo.settings.uart.paridad = UART_PARITY_SIN;
+  config_global.protocolo.settings.uart.stop_bits = UART_STOPBITS_1;
+  config_global.protocolo.settings.uart.lsb_first = 1;
+  config_global.protocolo.settings.uart.inverted = 0;
   // Suponiendo que el Trigger (flanco de bajada) ocurre en el pin RX
   config_global.trigger_pin = 8; // Pin 10 (PA10 = RX)
 
 
   Configurar_Disparo_Protocolo();
   DISP_Init();
-  DISP_FillRect(0, 0, 240, 320, COLOR_BG_DARK);
+  TOUCH_Init();
+  DISP_FillRect(0, 0, 320, 240, COLOR_BG_DARK);
+  // Clear stale RAM (STM32 does NOT zero RAM on warm reset)
+  decoded_idx = 0;
+  for (uint16_t i = 0; i < MAX_DECODED_CHARS; i++) {
+      decoded_buffer[i] = 0;
+      decoded_start_indices[i] = 0;
+      decoded_end_indices[i] = 0;
+  }
+  for (uint16_t i = 0; i < NUM_MUESTRAS; i++) buffer_states[i] = 0;
+  Update_Display_And_Log();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    static uint32_t last_encoder_cnt = 0;
+    uint32_t current_encoder_cnt = TIM3->CNT;
+    if (current_encoder_cnt != last_encoder_cnt) {
+        int16_t diff = (int16_t)current_encoder_cnt - (int16_t)last_encoder_cnt;
+        if (diff >= 4) {
+             extern void OnEncoderScrollRight(void);
+             OnEncoderScrollRight();
+             last_encoder_cnt = current_encoder_cnt;
+        } else if (diff <= -4) {
+             extern void OnEncoderScrollLeft(void);
+             OnEncoderScrollLeft();
+             last_encoder_cnt = current_encoder_cnt;
+        }
+    }
+
     Estado_FSM();
 
     // --- Manejo del renderizado UI ---
@@ -207,6 +284,12 @@ int main(void)
                 break;
             case STATE_SETTINGS:
                 Draw_Settings();
+                break;
+            case STATE_PROTOCOL_CONFIG:
+                Draw_ProtocolConfig();
+                break;
+            case STATE_TABLE_VIEW:
+                Draw_TableView();
                 break;
         }
         needs_refresh = 0;
@@ -404,6 +487,40 @@ static void MX_TIM1_Init(void)
   * @param None
   * @retval None
   */
+
+static void MX_TIM3_Init(void)
+{
+  TIM_Encoder_InitTypeDef sConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 0;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 65535;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  sConfig.EncoderMode = TIM_ENCODERMODE_TI12;
+  sConfig.IC1Polarity = TIM_ICPOLARITY_RISING;
+  sConfig.IC1Selection = TIM_ICSELECTION_DIRECTTI;
+  sConfig.IC1Prescaler = TIM_ICPSC_DIV1;
+  sConfig.IC1Filter = 15;
+  sConfig.IC2Polarity = TIM_ICPOLARITY_RISING;
+  sConfig.IC2Selection = TIM_ICSELECTION_DIRECTTI;
+  sConfig.IC2Prescaler = TIM_ICPSC_DIV1;
+  sConfig.IC2Filter = 15;
+  if (HAL_TIM_Encoder_Init(&htim3, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
+}
+
 static void MX_TIM2_Init(void)
 {
 
@@ -514,15 +631,25 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pins : DISP_DCA9_Pin PA10 PA11 PA12
                            PA15 */
-  GPIO_InitStruct.Pin = DISP_DCA9_Pin|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12
-                          |GPIO_PIN_15;
+  GPIO_InitStruct.Pin = DISP_DCA9_Pin|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12|GPIO_PIN_15;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI1_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(EXTI1_IRQn);
+
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+  /*Configure GPIO pin : ENCODER_SW_Pin */
+  GPIO_InitStruct.Pin = ENCODER_SW_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(ENCODER_SW_GPIO_Port, &GPIO_InitStruct);
+
+  HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI0_IRQn);
+
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
@@ -543,6 +670,21 @@ void Error_Handler(void)
   __disable_irq();
   while (1)
   {
+    static uint32_t last_encoder_cnt = 0;
+    uint32_t current_encoder_cnt = TIM3->CNT;
+    if (current_encoder_cnt != last_encoder_cnt) {
+        int16_t diff = (int16_t)current_encoder_cnt - (int16_t)last_encoder_cnt;
+        if (diff >= 4) {
+             extern void OnEncoderScrollRight(void);
+             OnEncoderScrollRight();
+             last_encoder_cnt = current_encoder_cnt;
+        } else if (diff <= -4) {
+             extern void OnEncoderScrollLeft(void);
+             OnEncoderScrollLeft();
+             last_encoder_cnt = current_encoder_cnt;
+        }
+    }
+
   }
   /* USER CODE END Error_Handler_Debug */
 }
