@@ -4,8 +4,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "main.h"
-extern volatile uint32_t buffer_timestamps[NUM_MUESTRAS];
-extern volatile uint16_t  buffer_states[NUM_MUESTRAS];
+extern volatile uint32_t buffer_timestamps[MAX_NUM_MUESTRAS];
+extern volatile uint16_t  buffer_states[MAX_NUM_MUESTRAS];
 typedef enum{
 	UART_PARITY_SIN,
 	UART_PARITY_PAR,

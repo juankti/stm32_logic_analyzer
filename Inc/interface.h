@@ -43,14 +43,14 @@ typedef struct {
 } View_t;
 
 typedef struct {
-    uint8_t samples[LOGIC_NUM_CHANNELS][LOGIC_BUFFER_SIZE];
+    uint8_t samples[LOGIC_NUM_CHANNELS][MAX_NUM_MUESTRAS];
     uint16_t total_samples;
     uint8_t active_channels;
     const char *channel_labels[LOGIC_NUM_CHANNELS];
 } CaptureBuffer_t;
 
 extern CaptureBuffer_t capture;
-extern int16_t viewer_scroll;
+extern uint32_t viewer_t_scroll;
 extern uint8_t viewer_zoom;
 extern int16_t table_scroll;
 extern uint8_t viewer_needs_full_redraw;

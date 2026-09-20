@@ -10,7 +10,7 @@ extern SPI_HandleTypeDef hspi1;
 #define CMD_RDY 0x90
 #define CMD_RDZ1 0xB0
 #define CMD_RDZ2 0xC0
-#define TOUCH_Z_THRESHOLD 250
+#define TOUCH_Z_THRESHOLD 200
 uint8_t was_pressed = 0;
 
 static uint16_t TOUCH_ReadADC_Raw(uint8_t cmd);

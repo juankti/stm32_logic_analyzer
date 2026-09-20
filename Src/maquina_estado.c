@@ -36,23 +36,22 @@ void Estado_FSM() {
             switch (config_global.protocolo.protocolo_activo) {
             // acá para escalar, conviene usar punteros a funciones
                 case UART:
-                    UART_FSM((uint16_t*)buffer_states, NUM_MUESTRAS, &config_global.protocolo.settings.uart);
+                    UART_FSM((uint16_t*)buffer_states, capture.total_samples, &config_global.protocolo.settings.uart);
                     break;
                 case SPI:
-                    SPI_FSM((uint16_t*)buffer_states, NUM_MUESTRAS, &config_global.protocolo.settings.spi);
+                    SPI_FSM((uint16_t*)buffer_states, capture.total_samples, &config_global.protocolo.settings.spi);
                     break;
                 case I2C:
-                    I2C_FSM((uint16_t*)buffer_states, NUM_MUESTRAS, &config_global.protocolo.settings.i2c);
+                    I2C_FSM((uint16_t*)buffer_states, capture.total_samples, &config_global.protocolo.settings.i2c);
                     break;
                 case NONE:
                 default:
                     break;
             }
             extern volatile uint32_t decoded_idx;
-            extern volatile uint16_t decoded_start_indices[];
-            extern int16_t viewer_scroll;
+            extern void FocusOnPacket(int32_t);
             if (decoded_idx > 0) {
-                viewer_scroll = decoded_start_indices[0];
+                FocusOnPacket(0);
             }
             Update_Display_And_Log();
             

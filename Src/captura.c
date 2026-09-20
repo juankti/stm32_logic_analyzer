@@ -11,10 +11,13 @@ void Conf_Captura(void){
 
     uint32_t prescaler = 83; // 1MHz default (84MHz/84)
     switch(conf.frequency) {
+        case kHz20:  prescaler = 4199; break; // 20KHz
         case kHz100: prescaler = 839; break; // 100KHz
         case kHz400: prescaler = 209; break; // 400KHz
-        case kHz20:  prescaler = 4199; break; // 20KHz
         case MHz1:   prescaler = 83; break;  // 1MHz
+        case MHz2:   prescaler = 41; break;  // 2MHz
+        case MHz4:   prescaler = 20; break;  // 4MHz
+        case MHz10_5: prescaler = 7; break;  // 10.5MHz
     }
     TIM1->PSC = prescaler;
     TIM2->PSC = prescaler;
@@ -26,7 +29,7 @@ void Conf_Captura(void){
 	// dma1 (timestamps)
 	DMA1_Stream6->PAR = (uint32_t)&TIM2->CCR2;
 	DMA1_Stream6->M0AR = (uint32_t)buffer_timestamps;
-	DMA1_Stream6->NDTR = NUM_MUESTRAS;
+	DMA1_Stream6->NDTR = Config_GetSizeValue(conf.buffer_size);
 	DMA1_Stream6->CR = DMA_SxCR_CHSEL_1 | DMA_SxCR_CHSEL_0 |
 	                       DMA_SxCR_MINC |
 	                       DMA_SxCR_MSIZE_1 |
@@ -35,7 +38,7 @@ void Conf_Captura(void){
 	// dma2 (gpioa)
 	DMA2_Stream1->PAR = (uint32_t)&GPIOA->IDR;
 	DMA2_Stream1->M0AR = (uint32_t)buffer_states;
-	DMA2_Stream1->NDTR = NUM_MUESTRAS;
+	DMA2_Stream1->NDTR = Config_GetSizeValue(conf.buffer_size);
 	DMA2_Stream1->CR = DMA_SxCR_CHSEL_1 | DMA_SxCR_CHSEL_2 |
 	                       DMA_SxCR_MINC |
 	                       DMA_SxCR_MSIZE_0 |

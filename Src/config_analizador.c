@@ -16,11 +16,11 @@ void Configurar_Disparo_Protocolo(void) {
             break;
             
         case SPI:
-            config_global.protocolo.settings.spi.pin_cs = __builtin_ctz(cfg->channels[0].pin); // CS MUST be CH1
-            config_global.protocolo.settings.spi.pin_sck = __builtin_ctz(cfg->channels[1].pin); // SCK on CH2
+            config_global.protocolo.settings.spi.pin_sck = __builtin_ctz(cfg->channels[0].pin); // SCK MUST be CH1
+            config_global.protocolo.settings.spi.pin_cs = __builtin_ctz(cfg->channels[1].pin); // CS on CH2
             config_global.protocolo.settings.spi.pin_mosi = __builtin_ctz(cfg->channels[2].pin); // MOSI on CH3
             config_global.protocolo.settings.spi.pin_miso = __builtin_ctz(cfg->channels[3].pin); // MISO on CH4
-            config_global.trigger_pin = config_global.protocolo.settings.spi.pin_cs;
+            config_global.trigger_pin = config_global.protocolo.settings.spi.pin_cs; // Trigger on CS
             break;
             
         case I2C:
@@ -30,6 +30,8 @@ void Configurar_Disparo_Protocolo(void) {
             break;
             
         case NONE:
+            config_global.trigger_pin = __builtin_ctz(cfg->channels[0].pin); // CH1
+            break;
         default:
             break;
     }

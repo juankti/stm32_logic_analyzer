@@ -61,8 +61,8 @@ DMA_HandleTypeDef hdma_tim2_ch2_ch4;
 
 /* USER CODE BEGIN PV */
 
-volatile uint32_t buffer_timestamps[NUM_MUESTRAS];
-volatile uint16_t buffer_states[NUM_MUESTRAS];
+volatile uint32_t buffer_timestamps[MAX_NUM_MUESTRAS];
+volatile uint16_t buffer_states[MAX_NUM_MUESTRAS];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -116,13 +116,13 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
         if (HAL_GPIO_ReadPin(ENCODER_SW_GPIO_Port, ENCODER_SW_Pin) == GPIO_PIN_RESET) {
             press_time = current_time;
         } else {
-            if (current_time - press_time > 1000) {
-                extern void OnTableClick(void);
-                OnTableClick();
-            } else if (current_time - press_time > 50) {
-                extern void OnModeToggleClick(void);
-                OnModeToggleClick();
-            }
+              if (current_time - press_time > 1000) {
+                  extern void OnEncoderButtonLongPress(void);
+                  OnEncoderButtonLongPress();
+              } else if (current_time - press_time > 50) {
+                  extern void OnEncoderButtonPress(void);
+                  OnEncoderButtonPress();
+              }
         }
     }
 }
@@ -130,7 +130,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 void Update_Display_And_Log(void) {
     // 1. Configuramos la estructura de captura para la interfaz
     capture.active_channels = 6;
-    capture.total_samples = NUM_MUESTRAS;
+    capture.total_samples = Config_GetSizeValue(conf.buffer_size);
 
     // Obtener los labels de la configuración actual
     const ProtocolPinConfig_t *cfg = Config_GetPinConfig(conf.protocol);
@@ -139,7 +139,7 @@ void Update_Display_And_Log(void) {
     }
 
     // 2. Extraer los datos de buffer_states (16 bits) al arreglo de la interfaz (1 byte por canal)
-    for (uint16_t i = 0; i < NUM_MUESTRAS; i++) {
+    for (uint16_t i = 0; i < capture.total_samples; i++) {
         uint16_t state = buffer_states[i];
         for (uint8_t ch = 0; ch < LOGIC_NUM_CHANNELS; ch++) {
             // Suponemos que los canales corresponden a los primeros pines configurados
@@ -150,9 +150,11 @@ void Update_Display_And_Log(void) {
     }
 
     // 3. Forzar el refresco de la vista de ondas
-    viewer_scroll = 0;
-    viewer_zoom = 1;
+    extern uint32_t viewer_t_scroll;
+    viewer_t_scroll = 0;
     viewer_needs_full_redraw = 1;
+    extern bool has_captured;
+    has_captured = true;
     current_state = STATE_MAIN_MENU;
     needs_refresh = 1;
 }
@@ -168,7 +170,7 @@ volatile uint32_t decoded_start_timestamps[MAX_DECODED_CHARS];
 volatile uint32_t decoded_end_timestamps[MAX_DECODED_CHARS];
 
 void Save_Decoded_Char(uint8_t c, uint32_t start_idx, uint32_t end_idx) {
-    if (decoded_idx < 64) {
+    if (decoded_idx < MAX_DECODED_CHARS) {
         decoded_buffer[decoded_idx] = c;
         decoded_start_indices[decoded_idx] = start_idx;
         decoded_end_indices[decoded_idx] = end_idx;
@@ -179,7 +181,7 @@ void Save_Decoded_Char(uint8_t c, uint32_t start_idx, uint32_t end_idx) {
 }
 
 void Save_Decoded_Char_With_Times(uint8_t c, uint32_t start_idx, uint32_t end_idx, uint32_t t_start, uint32_t t_end) {
-    if (decoded_idx < 64) {
+    if (decoded_idx < MAX_DECODED_CHARS) {
         decoded_buffer[decoded_idx] = c;
         decoded_start_indices[decoded_idx] = start_idx;
         decoded_end_indices[decoded_idx] = end_idx;
@@ -233,6 +235,10 @@ int main(void)
   config_global.protocolo.settings.uart.stop_bits = UART_STOPBITS_1;
   config_global.protocolo.settings.uart.lsb_first = 1;
   config_global.protocolo.settings.uart.inverted = 0;
+  
+  config_global.protocolo.settings.spi.mode = SPI_MODE_0;
+  config_global.protocolo.settings.spi.data_size = 8;
+  config_global.protocolo.settings.spi.bit_order = SPI_MSB_FIRST;
   // Suponiendo que el Trigger (flanco de bajada) ocurre en el pin RX
   config_global.trigger_pin = 8; // Pin 10 (PA10 = RX)
 
@@ -248,7 +254,7 @@ int main(void)
       decoded_start_indices[i] = 0;
       decoded_end_indices[i] = 0;
   }
-  for (uint16_t i = 0; i < NUM_MUESTRAS; i++) buffer_states[i] = 0;
+  for (uint16_t i = 0; i < MAX_NUM_MUESTRAS; i++) buffer_states[i] = 0;
   Update_Display_And_Log();
   /* USER CODE END 2 */
 
