@@ -5,16 +5,13 @@
 typedef struct {
     uint16_t x;
     uint16_t y;
-    uint16_t pressed_x;
-    uint16_t pressed_y;
-    uint8_t is_pressed;
-    uint8_t just_pressed;
-    uint8_t just_released;
+    uint8_t esta_presionado;
+    uint8_t recien_soltado;
 } TouchState_t;
 
 extern TouchState_t TS_State;
-extern volatile uint8_t touch_event_occurred;
+extern volatile uint8_t ocurrio_evento_toque;
 
-void TOUCH_Init(void);
-void TOUCH_Update(void);
+void TOUCH_Inicializar(void);
+void TOUCH_Actualizar(void);
 #endif

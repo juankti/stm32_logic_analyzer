@@ -21,14 +21,14 @@ typedef struct{
 		UART_Config_t uart;
 		spi_config_t spi;
 		i2c_config_t i2c;
-	}settings;
+	}ajustes;
 }config_protocolo;
 
 typedef struct{
 	// config captura
-	uint32_t freq_muestreo;
-	uint32_t trigger_pin;
-	uint8_t flanco; // 0: subida, 1: bajada, 2: none
+
+	uint32_t pin_disparo;
+	uint8_t flanco; // 0: subida, 1: bajada, 2: nada
 	
 	// config protocolo
 	config_protocolo protocolo;
@@ -37,7 +37,7 @@ typedef struct{
 
 extern Config_Analizador_t config_global;
 
-// mapeo dinamico de disparo segun protocolo
+// mapeo dinamico de disparo
 void Configurar_Disparo_Protocolo(void);
 
 #endif

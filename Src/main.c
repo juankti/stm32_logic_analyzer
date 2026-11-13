@@ -1,7 +1,7 @@
 /* USER CODE BEGIN Header */
 /**
   ******************************************************************************
-  * @file           : main.c
+  * @archivo           : main.c
   * @brief          : Main program body
   ******************************************************************************
   * @attention
@@ -9,17 +9,17 @@
   * Copyright (c) 2026 STMicroelectronics.
   * All rights reserved.
   *
-  * This software is licensed under terms that can be found in the LICENSE file
+  * This software is licensed under terms that can be found in the LICENSE archivo
   * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
+  * If no LICENSE archivo comes with this software, it is provided AS-IS.
   *
   ******************************************************************************
   */
 /* USER CODE END Header */
-/* Includes ------------------------------------------------------------------*/
+// inclusiones
 #include "main.h"
 
-/* Private includes ----------------------------------------------------------*/
+// inclusiones privadas
 /* USER CODE BEGIN Includes */
 
 #include "maquina_estado.h"
@@ -33,23 +33,23 @@
 
 /* USER CODE END Includes */
 
-/* Private typedef -----------------------------------------------------------*/
+// typedef privado
 /* USER CODE BEGIN PTD */
 
 
 /* USER CODE END PTD */
 
-/* Private define ------------------------------------------------------------*/
+// definicion privada
 /* USER CODE BEGIN PD */
 
 /* USER CODE END PD */
 
-/* Private macro -------------------------------------------------------------*/
+// macro privada
 /* USER CODE BEGIN PM */
 
 /* USER CODE END PM */
 
-/* Private variables ---------------------------------------------------------*/
+// variables privadas
 SPI_HandleTypeDef hspi1;
 DMA_HandleTypeDef hdma_spi1_tx;
 
@@ -61,11 +61,11 @@ DMA_HandleTypeDef hdma_tim2_ch2_ch4;
 
 /* USER CODE BEGIN PV */
 
-volatile uint32_t buffer_timestamps[MAX_NUM_MUESTRAS];
-volatile uint16_t buffer_states[MAX_NUM_MUESTRAS];
+volatile uint32_t tiempos_buffer[MAX_NUM_MUESTRAS];
+volatile uint16_t estados_buffer[MAX_NUM_MUESTRAS];
 /* USER CODE END PV */
 
-/* Private function prototypes -----------------------------------------------*/
+// prototipos funciones privadas
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
@@ -79,115 +79,164 @@ static void MX_SPI1_Init(void);
 
 /* USER CODE END PFP */
 
-/* Private user code ---------------------------------------------------------*/
+// codigo de usuario privado
 /* USER CODE BEGIN 0 */
 
+void Ejecutar_POST(void) {
+    // 1. Mostrar pantalla de inicio
+    DISP_LlenarRect(0, 0, DISP_WIDTH, DISP_HEIGHT, COLOR_BG_DARK);
+    DISP_DibujarTextoCentrado(0, 40, DISP_WIDTH, 50, "ANALIZADOR LOGICO", COLOR_UI_ACCENT, COLOR_BG_DARK);
+    DISP_DibujarTextoCentrado(0, 80, DISP_WIDTH, 20, "TDII - 2026", COLOR_SIG_LABEL, COLOR_BG_DARK);
+    DISP_DibujarTextoCentrado(0, 110, DISP_WIDTH, 20, "Desarrollado por:", COLOR_SIG_LABEL, COLOR_BG_DARK);
+    DISP_DibujarTextoCentrado(0, 130, DISP_WIDTH, 20, "Juan Ignacio Cati", COLOR_SIG_LABEL, COLOR_BG_DARK);
+    DISP_DibujarTextoCentrado(0, 150, DISP_WIDTH, 20, "Facundo Gimenez", COLOR_SIG_LABEL, COLOR_BG_DARK);
+    
+    DISP_DibujarTextoCentrado(0, 200, DISP_WIDTH, 20, "Ejecutando POST...", COLOR_UI_BTN_ACT, COLOR_BG_DARK);
 
-bool User_Pressed_Start(void) {
-    extern volatile bool start_capture_flag;
-    if (start_capture_flag) {
-        start_capture_flag = false;
+    HAL_Delay(1000); // Mostrar pantalla inicialmente
+
+    uint8_t post_fallo = 0;
+
+    // --- PUNTO 1: Verificaciones del Nucleo ---
+    if (SystemCoreClock != 84000000) {
+        post_fallo = 1;
+    }
+    // Leer causa de reset (para debug o log, opcional en pantalla)
+    uint32_t reset_cause = RCC->CSR;
+    RCC->CSR |= RCC_CSR_RMVF; // Limpiar banderas de reset
+    HAL_Delay(500);
+
+    // --- PUNTO 4: Perifericos ---
+    // Verificar que los relojes de DMA esten activos
+    if ((RCC->AHB1ENR & RCC_AHB1ENR_DMA1EN) == 0 || (RCC->AHB1ENR & RCC_AHB1ENR_DMA2EN) == 0) {
+        post_fallo = 1;
+    }
+    // SPI1 (Display usa SPI1)
+    if ((RCC->APB2ENR & RCC_APB2ENR_SPI1EN) == 0) {
+        post_fallo = 1;
+    }
+    HAL_Delay(500);
+
+    // --- PUNTO 5: Especificos del Analizador ---
+    // Verificar Timers 1, 2, 3
+    if ((RCC->APB2ENR & RCC_APB2ENR_TIM1EN) == 0 || 
+        (RCC->APB1ENR & RCC_APB1ENR_TIM2EN) == 0 || 
+        (RCC->APB1ENR & RCC_APB1ENR_TIM3EN) == 0) {
+        post_fallo = 1;
+    }
+    HAL_Delay(500);
+
+    // Resultado final
+    DISP_LlenarRect(0, 200, DISP_WIDTH, 30, COLOR_BG_DARK);
+    if (post_fallo) {
+        DISP_DibujarTextoCentrado(0, 200, DISP_WIDTH, 20, "POST ERROR!", COLOR_UI_REC, COLOR_BG_DARK);
+        while(1); // Detener el sistema si falla el hardware critico
+    } else {
+        DISP_DibujarTextoCentrado(0, 200, DISP_WIDTH, 20, "POST OK!", COLOR_SIG_HIGH, COLOR_BG_DARK);
+    }
+    
+    HAL_Delay(1000); // Dar tiempo a leer antes de ir al menu
+}
+
+
+bool Usuario_Presiono_Inicio(void) {
+    extern volatile bool bandera_inicio_captura;
+    if (bandera_inicio_captura) {
+        bandera_inicio_captura = false;
         return true;
     }
     return false;
 }
 
-void Hardware_Config_Trigger(void) {
-    if (config_global.flanco == 2) return; // NONE
+void Hardware_Configurar_Disparo(void) {
+    if (config_global.flanco == 2) return; // ninguno
     
-    // Software Trigger ultrarrápido por polling
-    uint32_t mask = (1 << config_global.trigger_pin);
+    // disparo software ultrarrapido por polling
+    uint32_t mascara = (1 << config_global.pin_disparo);
     if (config_global.flanco == 1) {
-        while((GPIOA->IDR & mask) != 0) { } // FALLING
+        while((GPIOA->IDR & mascara) != 0) { } // bajada
     } else {
-        while((GPIOA->IDR & mask) == 0) { } // RISING
+        while((GPIOA->IDR & mascara) == 0) { } // subida
     }
 }
 
-volatile uint8_t touch_event_occurred = 0;
+volatile uint8_t ocurrio_evento_toque = 0;
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
     if (GPIO_Pin == TOUCH_INT_Pin) {
-        touch_event_occurred = 1;
+        ocurrio_evento_toque = 1;
     }
     if (GPIO_Pin == ENCODER_SW_Pin) {
-        static uint32_t press_time = 0;
-        uint32_t current_time = HAL_GetTick();
+        static uint32_t tiempo_presion = 0;
+        uint32_t tiempo_actual = HAL_GetTick();
         if (HAL_GPIO_ReadPin(ENCODER_SW_GPIO_Port, ENCODER_SW_Pin) == GPIO_PIN_RESET) {
-            press_time = current_time;
+            tiempo_presion = tiempo_actual;
         } else {
-              if (current_time - press_time > 1000) {
-                  extern void OnEncoderButtonLongPress(void);
-                  OnEncoderButtonLongPress();
-              } else if (current_time - press_time > 50) {
-                  extern void OnEncoderButtonPress(void);
-                  OnEncoderButtonPress();
+              if (tiempo_actual - tiempo_presion > 1000) {
+                  extern void AlPresionarLargoBotonEncoder(void);
+                  AlPresionarLargoBotonEncoder();
+              } else if (tiempo_actual - tiempo_presion > 50) {
+                  extern void AlPresionarBotonEncoder(void);
+                  AlPresionarBotonEncoder();
               }
         }
     }
 }
 
-void Update_Display_And_Log(void) {
-    // 1. Configuramos la estructura de captura para la interfaz
-    capture.active_channels = 6;
-    capture.total_samples = Config_GetSizeValue(conf.buffer_size);
+void Actualizar_Pantalla_Y_Registro(void) {
+    // 1. configuramos estructura de captura
+    captura.canales_activos = 6;
+    captura.muestras_totales = Config_ObtenerValorTamaño(conf.tamaño_buffer);
 
-    // Obtener los labels de la configuración actual
-    const ProtocolPinConfig_t *cfg = Config_GetPinConfig(conf.protocol);
+    // obtener etiquetas de la configuracion actual
+    const ProtocolPinConfig_t *cfg = Config_ObtenerConfigPin(conf.protocolo);
     for (uint8_t ch = 0; ch < LOGIC_NUM_CHANNELS; ch++) {
-        capture.channel_labels[ch] = cfg->channels[ch].label;
+        captura.etiquetas_canal[ch] = cfg->canales[ch].etiqueta;
     }
 
-    // 2. Extraer los datos de buffer_states (16 bits) al arreglo de la interfaz (1 byte por canal)
-    for (uint16_t i = 0; i < capture.total_samples; i++) {
-        uint16_t state = buffer_states[i];
+    // 2. extraer datos de estados_buffer al arreglo de interfaz
+    for (uint16_t i = 0; i < captura.muestras_totales; i++) {
+        uint16_t estado = estados_buffer[i];
         for (uint8_t ch = 0; ch < LOGIC_NUM_CHANNELS; ch++) {
-            // Suponemos que los canales corresponden a los primeros pines configurados
-            // Si están en orden distinto, se puede usar cfg->channels[ch].pin como máscara
-            uint16_t pin_mask = cfg->channels[ch].pin;
-            capture.samples[ch][i] = (state & pin_mask) ? 1 : 0;
+            // suponemos que los canales corresponden a los primeros pines configurados
+            // si estan en orden distinto, usar pin como mascara
+            uint16_t mascara_pin = cfg->canales[ch].pin;
+            captura.muestras[ch][i] = (estado & mascara_pin) ? 1 : 0;
         }
     }
 
-    // 3. Forzar el refresco de la vista de ondas
-    extern uint32_t viewer_t_scroll;
-    viewer_t_scroll = 0;
-    viewer_needs_full_redraw = 1;
-    extern bool has_captured;
-    has_captured = true;
-    current_state = STATE_MAIN_MENU;
-    needs_refresh = 1;
+    // 3. forzar refresco de vista de ondas
+    extern uint32_t desplazamiento_t_visor;
+    desplazamiento_t_visor = 0;
+    visor_necesita_redibujo_completo = 1;
+    extern bool ha_capturado;
+    ha_capturado = true;
+    estado_actual = STATE_MAIN_MENU;
+    necesita_refresco = 1;
 }
 
 #define MAX_DECODED_CHARS 256
-volatile uint8_t decoded_buffer[MAX_DECODED_CHARS];
-volatile uint32_t decoded_idx = 0;
+volatile uint8_t buffer_decodificado[MAX_DECODED_CHARS];
+volatile uint32_t indice_decodificado = 0;
 
-volatile uint16_t decoded_start_indices[MAX_DECODED_CHARS];
-volatile uint16_t decoded_end_indices[MAX_DECODED_CHARS];
+volatile uint32_t tiempos_inicio_decodificados[MAX_DECODED_CHARS];
+volatile uint32_t tiempos_fin_decodificados[MAX_DECODED_CHARS];
 
-volatile uint32_t decoded_start_timestamps[MAX_DECODED_CHARS];
-volatile uint32_t decoded_end_timestamps[MAX_DECODED_CHARS];
-
-void Save_Decoded_Char(uint8_t c, uint32_t start_idx, uint32_t end_idx) {
-    if (decoded_idx < MAX_DECODED_CHARS) {
-        decoded_buffer[decoded_idx] = c;
-        decoded_start_indices[decoded_idx] = start_idx;
-        decoded_end_indices[decoded_idx] = end_idx;
-        decoded_start_timestamps[decoded_idx] = buffer_timestamps[start_idx];
-        decoded_end_timestamps[decoded_idx] = buffer_timestamps[end_idx];
-        decoded_idx++;
+void Guardar_Caracter_Decodificado(uint8_t c, uint32_t indice_inicio, uint32_t indice_fin) {
+    if (indice_decodificado < MAX_DECODED_CHARS) {
+        buffer_decodificado[indice_decodificado] = c;
+        tiempos_inicio_decodificados[indice_decodificado] = tiempos_buffer[indice_inicio];
+        tiempos_fin_decodificados[indice_decodificado] = tiempos_buffer[indice_fin];
+        indice_decodificado++;
     }
 }
 
-void Save_Decoded_Char_With_Times(uint8_t c, uint32_t start_idx, uint32_t end_idx, uint32_t t_start, uint32_t t_end) {
-    if (decoded_idx < MAX_DECODED_CHARS) {
-        decoded_buffer[decoded_idx] = c;
-        decoded_start_indices[decoded_idx] = start_idx;
-        decoded_end_indices[decoded_idx] = end_idx;
-        decoded_start_timestamps[decoded_idx] = t_start;
-        decoded_end_timestamps[decoded_idx] = t_end;
-        decoded_idx++;
+void Guardar_Caracter_Decodificado_Con_Tiempos(uint8_t c, uint32_t indice_inicio, uint32_t indice_fin, uint32_t inicio_t, uint32_t fin_t) {
+    if (indice_decodificado < MAX_DECODED_CHARS) {
+        buffer_decodificado[indice_decodificado] = c;
+        tiempos_inicio_decodificados[indice_decodificado] = inicio_t;
+        tiempos_fin_decodificados[indice_decodificado] = fin_t;
+        indice_decodificado++;
     }
 }
 
@@ -204,23 +253,23 @@ int main(void)
 
   /* USER CODE END 1 */
 
-  /* MCU Configuration--------------------------------------------------------*/
+  // configuracion mcu
 
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  // reinicio perifericos, inicializa flash y systick
   HAL_Init();
 
   /* USER CODE BEGIN Init */
 
   /* USER CODE END Init */
 
-  /* Configure the system clock */
+  // configurar reloj del sistema
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
 
   /* USER CODE END SysInit */
 
-  /* Initialize all configured peripherals */
+  // inicializa todos los perifericos configurados
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_TIM1_Init();
@@ -229,112 +278,114 @@ int main(void)
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
   config_global.protocolo.protocolo_activo = UART;
-  config_global.protocolo.settings.uart.baudrate = 9600;
-  config_global.protocolo.settings.uart.data_bits = 8;
-  config_global.protocolo.settings.uart.paridad = UART_PARITY_SIN;
-  config_global.protocolo.settings.uart.stop_bits = UART_STOPBITS_1;
-  config_global.protocolo.settings.uart.lsb_first = 1;
-  config_global.protocolo.settings.uart.inverted = 0;
+  config_global.protocolo.ajustes.uart.tasa_baudios = 9600;
+  config_global.protocolo.ajustes.uart.bits_datos = 8;
+  config_global.protocolo.ajustes.uart.paridad = UART_PARITY_SIN;
+  config_global.protocolo.ajustes.uart.bits_parada = UART_STOPBITS_1;
+  config_global.protocolo.ajustes.uart.lsb_primero = 1;
+  config_global.protocolo.ajustes.uart.invertido = 0;
   
-  config_global.protocolo.settings.spi.mode = SPI_MODE_0;
-  config_global.protocolo.settings.spi.data_size = 8;
-  config_global.protocolo.settings.spi.bit_order = SPI_MSB_FIRST;
-  // Suponiendo que el Trigger (flanco de bajada) ocurre en el pin RX
-  config_global.trigger_pin = 8; // Pin 10 (PA10 = RX)
+  config_global.protocolo.ajustes.spi.modo = SPI_MODE_0;
+  config_global.protocolo.ajustes.spi.tamaño_datos = 8;
+  config_global.protocolo.ajustes.spi.orden_bits = SPI_MSB_FIRST;
+  // suponiendo que el disparo ocurre en el pin rx
+  config_global.pin_disparo = 8; // pin 10 (pa10 = rx)
 
 
   Configurar_Disparo_Protocolo();
-  DISP_Init();
-  TOUCH_Init();
-  DISP_FillRect(0, 0, 320, 240, COLOR_BG_DARK);
-  // Clear stale RAM (STM32 does NOT zero RAM on warm reset)
-  decoded_idx = 0;
+  DISP_Inicializar();
+  TOUCH_Inicializar();
+  
+  // Ejecutar el POST (verificara nucleo, perifericos y timers de captura)
+  Ejecutar_POST();
+  
+  DISP_LlenarRect(0, 0, 320, 240, COLOR_BG_DARK);
+  // limpiar ram obsoleta
+  indice_decodificado = 0;
   for (uint16_t i = 0; i < MAX_DECODED_CHARS; i++) {
-      decoded_buffer[i] = 0;
-      decoded_start_indices[i] = 0;
-      decoded_end_indices[i] = 0;
+      buffer_decodificado[i] = 0;
   }
-  for (uint16_t i = 0; i < MAX_NUM_MUESTRAS; i++) buffer_states[i] = 0;
-  Update_Display_And_Log();
+  for (uint16_t i = 0; i < MAX_NUM_MUESTRAS; i++) estados_buffer[i] = 0;
+  Actualizar_Pantalla_Y_Registro();
   /* USER CODE END 2 */
 
-  /* Infinite loop */
+  // bucle infinito
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    static uint32_t last_encoder_cnt = 0;
-    uint32_t current_encoder_cnt = TIM3->CNT;
-    if (current_encoder_cnt != last_encoder_cnt) {
-        int16_t diff = (int16_t)current_encoder_cnt - (int16_t)last_encoder_cnt;
-        if (diff >= 4) {
-             extern void OnEncoderScrollRight(void);
-             OnEncoderScrollRight();
-             last_encoder_cnt = current_encoder_cnt;
-        } else if (diff <= -4) {
-             extern void OnEncoderScrollLeft(void);
-             OnEncoderScrollLeft();
-             last_encoder_cnt = current_encoder_cnt;
+    static uint32_t ultimo_conteo_encoder = 0;
+    uint32_t conteo_encoder_actual = TIM3->CNT;
+    if (conteo_encoder_actual != ultimo_conteo_encoder) {
+        int16_t diferencia = (int16_t)conteo_encoder_actual - (int16_t)ultimo_conteo_encoder;
+        if (diferencia >= 4) {
+             extern void AlDesplazarEncoderDer(void);
+             AlDesplazarEncoderDer();
+             ultimo_conteo_encoder = conteo_encoder_actual;
+        } else if (diferencia <= -4) {
+             extern void AlDesplazarEncoderIzq(void);
+             AlDesplazarEncoderIzq();
+             ultimo_conteo_encoder = conteo_encoder_actual;
         }
     }
 
     Estado_FSM();
 
-    // --- Manejo del renderizado UI ---
-    if (needs_refresh) {
-        switch (current_state) {
+    // --- manejo del renderizado ui ---
+    if (necesita_refresco) {
+        switch (estado_actual) {
             case STATE_MAIN_MENU:
-                Draw_MainMenu();
+                Dibujar_MenuPrincipal();
                 break;
             case STATE_VIEWER:
-                Draw_Viewer();
+                Dibujar_Visor();
                 break;
             case STATE_SETTINGS:
-                Draw_Settings();
+                Dibujar_Ajustes();
                 break;
             case STATE_PROTOCOL_CONFIG:
-                Draw_ProtocolConfig();
+                Dibujar_ConfigProtocolo();
                 break;
             case STATE_TABLE_VIEW:
-                Draw_TableView();
+                Dibujar_VistaTabla();
                 break;
         }
-        needs_refresh = 0;
+        necesita_refresco = 0;
     }
 
-    // --- Manejo de la lógica táctil ---
-    if (touch_event_occurred || TS_State.is_pressed || TS_State.just_released) {
-        TOUCH_Update();
+    // --- manejo logica tactil ---
+    if (ocurrio_evento_toque || TS_State.esta_presionado || TS_State.recien_soltado) {
+        TOUCH_Actualizar();
 
         uint16_t px = TS_State.x;
         uint16_t py = TS_State.y;
-        View_t *active_view = &views[current_state];
+        View_t *vista_activa = &vistas[estado_actual];
 
-        if (active_view->buttons != NULL && active_view->buttonCount > 0) {
-            if (TS_State.is_pressed) {
-                for (uint8_t i = 0; i < active_view->buttonCount; i++) {
-                    Button_t *btn = &active_view->buttons[i];
-                    uint8_t was_active = btn->isActive;
+        if (vista_activa->botones != NULL && vista_activa->conteoBotones > 0) {
+            if (TS_State.esta_presionado) {
+                for (uint8_t i = 0; i < vista_activa->conteoBotones; i++) {
+                    Button_t *boton = &vista_activa->botones[i];
+                    uint8_t estaba_activo = boton->estaActivo;
 
-                    UI_HandleActive(btn, px, py);
+                    UI_ManejarActivo(boton, px, py);
 
-                    if (btn->isActive != was_active) {
-                        UI_DrawButton(btn);
+                    if (boton->estaActivo != estaba_activo) {
+                        UI_DibujarBoton(boton);
                     }
                 }
             }
             
-            if (TS_State.just_released) {
-                for (uint8_t i = 0; i < active_view->buttonCount; i++) {
-                    Button_t *btn = &active_view->buttons[i];
-                    if (btn->isActive) {
-                        btn->isActive = 0;
-                        UI_DrawButton(btn);
-                        if (btn->onClick != NULL) {
-                            btn->onClick();
+            if (TS_State.recien_soltado) {
+                for (uint8_t i = 0; i < vista_activa->conteoBotones; i++) {
+                    Button_t *boton = &vista_activa->botones[i];
+                    if (boton->estaActivo) {
+                        boton->estaActivo = 0;
+                        UI_DibujarBoton(boton);
+                        if (boton->alClic != NULL) {
+                            boton->alClic();
                         }
                     }
                 }
-                touch_event_occurred = 0;
+                ocurrio_evento_toque = 0;
             }
         }
     }
@@ -354,8 +405,7 @@ void SystemClock_Config(void)
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-  /** Configure the main internal regulator output voltage
-  */
+  // configurar voltaje de salida del regulador interno main
   __HAL_RCC_PWR_CLK_ENABLE();
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE2);
 
@@ -376,8 +426,7 @@ void SystemClock_Config(void)
     Error_Handler();
   }
 
-  /** Initializes the CPU, AHB and APB buses clocks
-  */
+  // inicializa los relojes de buses cpu, ahb y apb
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
@@ -580,24 +629,22 @@ static void MX_TIM2_Init(void)
 
 }
 
-/**
-  * Enable DMA controller clock
-  */
+// habilitar reloj controlador dma
 static void MX_DMA_Init(void)
 {
 
-  /* DMA controller clock enable */
+  // habilitacion reloj controlador dma
   __HAL_RCC_DMA2_CLK_ENABLE();
   __HAL_RCC_DMA1_CLK_ENABLE();
 
-  /* DMA interrupt init */
-  /* DMA1_Stream6_IRQn interrupt configuration */
+  // init interrupcion dma
+  // configuracion interrupcion dma1_stream6_irqn
   HAL_NVIC_SetPriority(DMA1_Stream6_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream6_IRQn);
-  /* DMA2_Stream1_IRQn interrupt configuration */
+  // configuracion interrupcion dma2_stream1_irqn
   HAL_NVIC_SetPriority(DMA2_Stream1_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream1_IRQn);
-  /* DMA2_Stream3_IRQn interrupt configuration */
+  // configuracion interrupcion dma2_stream3_irqn
   HAL_NVIC_SetPriority(DMA2_Stream3_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream3_IRQn);
 
@@ -615,39 +662,38 @@ static void MX_GPIO_Init(void)
 
   /* USER CODE END MX_GPIO_Init_1 */
 
-  /* GPIO Ports Clock Enable */
+  // habilitacion reloj puertos gpio
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
-  /*Configure GPIO pin Output Level */
+  // configurar nivel de salida de pin gpio
   HAL_GPIO_WritePin(GPIOA, TOUCH_CS_Pin|DISP_CS_Pin|DISP_RST_Pin|DISP_DC_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : TOUCH_CS_Pin DISP_CS_Pin DISP_RST_Pin DISP_DC_Pin */
+  // configurar pines gpio : touch_cs_pin disp_cs_pin disp_rst_pin disp_dc_pin
   GPIO_InitStruct.Pin = TOUCH_CS_Pin|DISP_CS_Pin|DISP_RST_Pin|DISP_DC_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : TOUCH_INT_Pin */
+  // configurar pin gpio : touch_int_pin
   GPIO_InitStruct.Pin = TOUCH_INT_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(TOUCH_INT_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : DISP_DCA9_Pin PA10 PA11 PA12
-                           PA15 */
+  // configurar pines gpio : disp_dca9_pin pa10 pa11 pa12 pa15
   GPIO_InitStruct.Pin = DISP_DCA9_Pin|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12|GPIO_PIN_15;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /* EXTI interrupt init*/
+  // inicializacion interrupcion exti
   HAL_NVIC_SetPriority(EXTI1_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(EXTI1_IRQn);
 
   __HAL_RCC_GPIOB_CLK_ENABLE();
-  /*Configure GPIO pin : ENCODER_SW_Pin */
+  // configurar pin gpio : encoder_sw_pin
   GPIO_InitStruct.Pin = ENCODER_SW_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
@@ -672,41 +718,26 @@ static void MX_GPIO_Init(void)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
+  // el usuario puede agregar implementacion de reporte error
   __disable_irq();
   while (1)
   {
-    static uint32_t last_encoder_cnt = 0;
-    uint32_t current_encoder_cnt = TIM3->CNT;
-    if (current_encoder_cnt != last_encoder_cnt) {
-        int16_t diff = (int16_t)current_encoder_cnt - (int16_t)last_encoder_cnt;
-        if (diff >= 4) {
-             extern void OnEncoderScrollRight(void);
-             OnEncoderScrollRight();
-             last_encoder_cnt = current_encoder_cnt;
-        } else if (diff <= -4) {
-             extern void OnEncoderScrollLeft(void);
-             OnEncoderScrollLeft();
-             last_encoder_cnt = current_encoder_cnt;
-        }
-    }
-
   }
   /* USER CODE END Error_Handler_Debug */
 }
 #ifdef USE_FULL_ASSERT
 /**
-  * @brief  Reports the name of the source file and the source line number
+  * @brief  Reports the name of the source archivo and the source linea number
   *         where the assert_param error has occurred.
-  * @param  file: pointer to the source file name
-  * @param  line: assert_param error line source number
+  * @param  archivo: pointer to the source archivo name
+  * @param  linea: assert_param error linea source number
   * @retval None
   */
-void assert_failed(uint8_t *file, uint32_t line)
+void assert_failed(uint8_t *archivo, uint32_t linea)
 {
   /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
-     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* User can add his own implementation to report the archivo name and linea number,
+     ex: printf("Wrong parameters value: archivo %s on linea %d\r\n", archivo, linea) */
   /* USER CODE END 6 */
 }
-#endif /* USE_FULL_ASSERT */
+#endif // use_full_assert

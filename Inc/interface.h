@@ -5,28 +5,28 @@
 #include "disp_ui.h"
 #include "touch_driver.h"
 #include "interface_conf.h"
-/* Standard RGB565 Colors */
+// colores rgb565 estandar
 #define COLOR_BLACK   0x0000
 #define COLOR_WHITE   0xFFFF
 
-/* Signals theme palette */
-#define COLOR_BG_DARK     0x10A2  /* Very dark charcoal background */
-#define COLOR_BG_DARKER   0x0842  /* Darker panel background */
-#define COLOR_SIG_HIGH    0x07E0  /* Bright green - logic HIGH */
-#define COLOR_SIG_LOW     0x07E0  /* Bright green - logic LOW */
-#define COLOR_SIG_LABEL   0xFFFF  /* White - channel labels */
-#define COLOR_SIG_SEP     0x2104  /* Subtle dark gray separator */
-#define COLOR_UI_BTN      0x2945  /* Dark blue-gray button */
-#define COLOR_UI_BTN_ACT  0x07FF  /* Cyan button active/pressed */
-#define COLOR_UI_ACCENT   0x07FF  /* Cyan accent */
-#define COLOR_UI_STATUS   0x0124  /* Very dark status bar */
-#define COLOR_UI_STATUS_T 0xFFFF  /* Status bar text */
-#define COLOR_UI_REC      0xF800  /* Red for REC button */
+// paleta de tema de señales
+#define COLOR_BG_DARK     0x10A2  // fondo carbon muy oscuro
+#define COLOR_BG_DARKER   0x0842  // fondo de panel mas oscuro
+#define COLOR_SIG_HIGH    0x07E0  // verde brillante - logica alta
+#define COLOR_SIG_LOW     0x07E0  // verde brillante - nivel bajo
+#define COLOR_SIG_LABEL   0xFFFF  // blanco - etiquetas canal
+#define COLOR_SIG_SEP     0x2104  // separador gris oscuro sutil
+#define COLOR_UI_BTN      0x2945  // boton azul-gris oscuro
+#define COLOR_UI_BTN_ACT  0x07FF  // boton cian activo/presionado
+#define COLOR_UI_ACCENT   0x07FF  // acento cian
+#define COLOR_UI_STATUS   0x0124  // barra de estado muy oscura
+#define COLOR_UI_STATUS_T 0xFFFF  // texto barra de estado
+#define COLOR_UI_REC      0xF800  // rojo para boton rec
 
 
 
 
-//Interface State
+// estado interfaz
 typedef enum {
 	STATE_MAIN_MENU,
 	STATE_VIEWER,
@@ -35,67 +35,64 @@ typedef enum {
 	STATE_TABLE_VIEW,
 } AppState_t;
 
-// Views
+// vistas
 typedef struct {
-    Button_t* buttons;     // Pointer to array of buttons
-    uint8_t buttonCount;   // Button count
-    void (*onDraw)(void);  // Screen drawing callback
+    Button_t* botones;     // puntero a arreglo de botones
+    uint8_t conteoBotones;   // cantidad botones
+    void (*al_dibujar)(void);  // retrollamada de dibujo en pantalla
 } View_t;
 
 typedef struct {
-    uint8_t samples[LOGIC_NUM_CHANNELS][MAX_NUM_MUESTRAS];
-    uint16_t total_samples;
-    uint8_t active_channels;
-    const char *channel_labels[LOGIC_NUM_CHANNELS];
+    uint8_t muestras[LOGIC_NUM_CHANNELS][MAX_NUM_MUESTRAS];
+    uint16_t muestras_totales;
+    uint8_t canales_activos;
+    const char *etiquetas_canal[LOGIC_NUM_CHANNELS];
 } CaptureBuffer_t;
 
-extern CaptureBuffer_t capture;
-extern uint32_t viewer_t_scroll;
-extern uint8_t viewer_zoom;
-extern int16_t table_scroll;
-extern uint8_t viewer_needs_full_redraw;
-extern uint8_t encoder_zoom_mode;
+extern CaptureBuffer_t captura;
+extern uint32_t desplazamiento_t_visor;
+extern uint8_t zoom_visor;
+extern int16_t desplazamiento_tabla;
+extern uint8_t visor_necesita_redibujo_completo;
+extern uint8_t modo_zoom_encoder;
 
-extern AppState_t current_state;
-extern uint8_t needs_refresh;
+extern AppState_t estado_actual;
+extern uint8_t necesita_refresco;
 
-extern Button_t main_menu_buttons[];
-extern Button_t settings_buttons[];
-extern Button_t viewer_buttons[];
-extern Button_t protocol_config_buttons[];
-extern Button_t table_view_buttons[];
-extern View_t views[];
+extern Button_t botones_menu_principal[];
+extern Button_t botones_ajustes[];
+extern Button_t botones_visor[];
+extern Button_t botones_config_protocolo[];
+extern Button_t botones_vista_tabla[];
+extern View_t vistas[];
 
-// Buttons callbacks
-void OnOptionsClick(void);
-void OnRedClick(void);
-void OnCaptureClick(void);
-void OnBackClick(void);
-void OnConfigClick(void);
-void OnTableClick(void);
-void OnModeToggleClick(void);
-void OnConfigBackClick(void);
-void OnDecodeClick(void);
-void OnSettingClick(void);
-void OnUARTParamsClick(void);
+// retrollamadas de botones
 
-void OnScrollLeftClick(void);
-void OnScrollRightClick(void);
-void OnEncoderScrollLeft(void);
-void OnEncoderScrollRight(void);
-void OnZoomInClick(void);
-void OnZoomOutClick(void);
+void AlClicCaptura(void);
+void AlClicAtras(void);
+void AlClicConfig(void);
+void AlClicTabla(void);
+void AlClicAlternarModo(void);
+void AlClicAtrasConfig(void);
+void AlClicDecodificar(void);
+void AlClicAjuste(void);
+void AlClicParamsUART(void);
 
-void OnProtocolClick(void);
-void OnFreqClick(void);
-void OnTriggerClick(void);
-void OnRadixClick(void);
+void AlClicDesplazarIzq(void);
+void AlClicDesplazarDer(void);
+void AlDesplazarEncoderIzq(void);
+void AlDesplazarEncoderDer(void);
 
-// Views callbacks
-void Draw_MainMenu();
-void Draw_Viewer();
-void Draw_Settings();
-void Draw_ProtocolConfig();
-void Draw_TableView();
+void AlClicProtocolo(void);
+void AlClicFrec(void);
+void AlClicDisparo(void);
+void AlClicRadix(void);
+
+// vistas callbacks
+void Dibujar_MenuPrincipal();
+void Dibujar_Visor();
+void Dibujar_Ajustes();
+void Dibujar_ConfigProtocolo();
+void Dibujar_VistaTabla();
 
 #endif

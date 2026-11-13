@@ -5,13 +5,13 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// Evitamos incluir recursivamente si no es necesario, o lo incluimos de forma cruzada usando pre-declaraciones si hace falta.
-// Ya que config_analizador.h tiene la estructura de configuración general.
-struct Config_Analizador_t; // Forward declaration si es necesario, o incluimos aquí.
+// evitamos incluir recursivamente si no es necesario
+// ya que config_analizador.h tiene la configuracion general
+struct Config_Analizador_t; // declaracion adelantada si es necesario
 
-void Conf_Captura(void); // Asumimos que usa config_global internamente o adaptamos la firma si es necesario.
-void Init_Captura();
-void Stop_Captura();
-bool Capture_IsFinished(void);
+void Conf_Captura(void); // asumimos que usa config_global internamente
+void Inicializar_Captura();
+void Detener_Captura();
+bool Captura_Terminada(void);
 
 #endif

@@ -1,17 +1,17 @@
 #include "interface.h"
 #include <stdio.h>
 
-AppState_t current_state = STATE_MAIN_MENU;
-uint8_t needs_refresh = 1;
+AppState_t estado_actual = STATE_MAIN_MENU;
+uint8_t necesita_refresco = 1;
 
-// Layout constants
+// constantes de diseño
 #define ROW_H 30
 #define ROW_SPACE 5
 #define ROW_0_Y 40
 #define ROW_1_Y (ROW_0_Y + ROW_H + ROW_SPACE)
 #define ROW_2_Y (ROW_1_Y + ROW_H + ROW_SPACE)
 
-// Waveform viewer layout
+// diseño visor de ondas
 #define WAVE_Y_START      18
 #define WAVE_Y_END        (DISP_HEIGHT - 30)
 #define WAVE_AREA_HEIGHT  (WAVE_Y_END - WAVE_Y_START)
@@ -25,898 +25,898 @@ uint8_t needs_refresh = 1;
 #define WAVE_COLOR_LABEL  COLOR_SIG_LABEL
 #define WAVE_COLOR_SEP    COLOR_SIG_SEP
 
-// Lookup tables
+// tablas de busqueda
 
-const char* trigger_strings[]  = {"RISING", "FALLING", "NONE"};
+const char* cadenas_disparo[]  = {"RISING", "FALLING", "NONE"};
 
-// Capture buffer and viewer state
-CaptureBuffer_t capture;
-uint32_t viewer_t_scroll = 0;
-uint8_t viewer_zoom = 6;   // index into zoom_divisors[]; 6 -> divisor=10.0f (~100px per 9600-baud frame)
-uint8_t viewer_needs_full_redraw = 1;
-uint8_t encoder_zoom_mode = 0;
-int8_t selected_button_idx = -1;
-bool has_captured = false;
+// capturar buffer y estado del visor
+CaptureBuffer_t captura;
+uint32_t desplazamiento_t_visor = 0;
+uint8_t zoom_visor = 6;   // indice de divisores_zoom
+uint8_t visor_necesita_redibujo_completo = 1;
+uint8_t modo_zoom_encoder = 0;
+int8_t indice_boton_seleccionado = -1;
+bool ha_capturado = false;
 
-extern void OnBackToViewerClick(void);
-extern void OnSizeClick(void);
+extern void AlClicVolverVisor(void);
+extern void AlClicTamaño(void);
 
-// Main Menu Buttons
-Button_t main_menu_buttons[5] = {
-    {150, 40,  120, 35, COLOR_UI_BTN, "Freq",  OnFreqClick, 0},
-    {150, 85,  120, 35, COLOR_UI_BTN, "Size",  OnSizeClick, 0},
-    {150, 130, 120, 35, COLOR_UI_BTN, "Config", OnConfigClick, 0},
-    {150, 175, 120, 35, COLOR_UI_REC, "REC",   OnCaptureClick, 0},
-    {0,   210, 80,  30, COLOR_UI_BTN, "Back", OnBackToViewerClick, 0},
+// botones menu main
+Button_t botones_menu_principal[5] = {
+    {150, 40,  120, 35, COLOR_UI_BTN, "Freq",  AlClicFrec, 0},
+    {150, 85,  120, 35, COLOR_UI_BTN, "Size",  AlClicTamaño, 0},
+    {150, 130, 120, 35, COLOR_UI_BTN, "Config", AlClicConfig, 0},
+    {150, 175, 120, 35, COLOR_UI_REC, "REC",   AlClicCaptura, 0},
+    {0,   210, 80,  30, COLOR_UI_BTN, "Back", AlClicVolverVisor, 0},
 };
 
-// Settings Buttons
+// botones de ajustes
 #define SETTINGS_CONF_SIZE 5
-Button_t settings_buttons[SETTINGS_CONF_SIZE] = {
-    {DISP_WIDTH/3, ROW_0_Y, (DISP_WIDTH * 2)/3, ROW_H, COLOR_UI_BTN, "I2C",       OnProtocolClick, 0},
-    {DISP_WIDTH/3, ROW_1_Y, (DISP_WIDTH * 2)/3, ROW_H, COLOR_UI_BTN, "frequency", OnFreqClick,     0},
-    {DISP_WIDTH/3, ROW_2_Y, (DISP_WIDTH * 2)/3, ROW_H, COLOR_UI_BTN, "RISING",    OnTriggerClick, 0},
-    {DISP_WIDTH/3, ROW_2_Y + ROW_H + 5, (DISP_WIDTH * 2)/3, ROW_H, COLOR_UI_BTN, "HEX", OnRadixClick, 0},
-    {0, DISP_HEIGHT-30,     DISP_WIDTH/3,       ROW_H, COLOR_UI_BTN, "Back",      OnBackClick,     0},
+Button_t botones_ajustes[SETTINGS_CONF_SIZE] = {
+    {DISP_WIDTH/3, ROW_0_Y, (DISP_WIDTH * 2)/3, ROW_H, COLOR_UI_BTN, "I2C",       AlClicProtocolo, 0},
+    {DISP_WIDTH/3, ROW_1_Y, (DISP_WIDTH * 2)/3, ROW_H, COLOR_UI_BTN, "frecuencia", AlClicFrec,     0},
+    {DISP_WIDTH/3, ROW_2_Y, (DISP_WIDTH * 2)/3, ROW_H, COLOR_UI_BTN, "RISING",    AlClicDisparo, 0},
+    {DISP_WIDTH/3, ROW_2_Y + ROW_H + 5, (DISP_WIDTH * 2)/3, ROW_H, COLOR_UI_BTN, "HEX", AlClicRadix, 0},
+    {0, DISP_HEIGHT-30,     DISP_WIDTH/3,       ROW_H, COLOR_UI_BTN, "Back",      AlClicAtras,     0},
 };
 
-// Viewer Buttons
+// botones visor
 #define VIEWER_BTN_W (DISP_WIDTH / 4)
-Button_t viewer_buttons[5] = {
-    {VIEWER_BTN_W * 0, DISP_HEIGHT - 30, VIEWER_BTN_W, 30, COLOR_UI_BTN, "Config",  OnConfigClick,      0},
-    {VIEWER_BTN_W * 1, DISP_HEIGHT - 30, VIEWER_BTN_W, 30, COLOR_UI_BTN, "<",    OnScrollLeftClick,  0},
-    {VIEWER_BTN_W * 2, DISP_HEIGHT - 30, VIEWER_BTN_W, 30, COLOR_UI_BTN, ">",    OnScrollRightClick, 0},
-    {VIEWER_BTN_W * 3, DISP_HEIGHT - 30, VIEWER_BTN_W, 30, COLOR_UI_BTN, "Back", OnBackClick,        0},
-    {0,                0,                30,           18, COLOR_UI_BTN, "S",    OnModeToggleClick,  0},
+Button_t botones_visor[5] = {
+    {VIEWER_BTN_W * 0, DISP_HEIGHT - 30, VIEWER_BTN_W, 30, COLOR_UI_BTN, "Config",  AlClicConfig,      0},
+    {VIEWER_BTN_W * 1, DISP_HEIGHT - 30, VIEWER_BTN_W, 30, COLOR_UI_BTN, "<",    AlClicDesplazarIzq,  0},
+    {VIEWER_BTN_W * 2, DISP_HEIGHT - 30, VIEWER_BTN_W, 30, COLOR_UI_BTN, ">",    AlClicDesplazarDer, 0},
+    {VIEWER_BTN_W * 3, DISP_HEIGHT - 30, VIEWER_BTN_W, 30, COLOR_UI_BTN, "Back", AlClicAtras,        0},
+    {0,                0,                30,           18, COLOR_UI_BTN, "S",    AlClicAlternarModo,  0},
 };
 
-// Protocol Config Buttons
-extern void OnUARTLsbInvClick(void);
-Button_t protocol_config_buttons[7] = {
-    {DISP_WIDTH/3, ROW_0_Y, (DISP_WIDTH * 2)/3, ROW_H, COLOR_UI_BTN, "I2C",       OnProtocolClick, 0},
-    {DISP_WIDTH/3, ROW_1_Y, (DISP_WIDTH * 2)/3, ROW_H, COLOR_UI_BTN, "Setting",   OnSettingClick,  0},
-    {DISP_WIDTH/3, ROW_2_Y, (DISP_WIDTH * 2)/3, ROW_H, COLOR_UI_BTN, "HEX",       OnRadixClick, 0},
-    {DISP_WIDTH/3, ROW_2_Y + ROW_H + 5, (DISP_WIDTH * 2)/3, ROW_H, COLOR_UI_BTN, "8N1",       OnUARTParamsClick, 0},
-    {DISP_WIDTH/3, ROW_2_Y + 2*(ROW_H + 5), (DISP_WIDTH * 2)/3, ROW_H, COLOR_UI_BTN, "LSB/Norm",  OnUARTLsbInvClick, 0},
-    {0, DISP_HEIGHT-30,     DISP_WIDTH/3,       ROW_H, COLOR_UI_BTN, "Back",      OnConfigBackClick, 0},
-    {DISP_WIDTH/3*2, DISP_HEIGHT-30, DISP_WIDTH/3, ROW_H, COLOR_UI_BTN, "Decode", OnDecodeClick,     0},
+// botones config protocolo
+extern void AlClicUARTLsbInv(void);
+Button_t botones_config_protocolo[7] = {
+    {DISP_WIDTH/3, ROW_0_Y, (DISP_WIDTH * 2)/3, ROW_H, COLOR_UI_BTN, "I2C",       AlClicProtocolo, 0},
+    {DISP_WIDTH/3, ROW_1_Y, (DISP_WIDTH * 2)/3, ROW_H, COLOR_UI_BTN, "Setting",   AlClicAjuste,  0},
+    {DISP_WIDTH/3, ROW_2_Y, (DISP_WIDTH * 2)/3, ROW_H, COLOR_UI_BTN, "HEX",       AlClicRadix, 0},
+    {DISP_WIDTH/3, ROW_2_Y + ROW_H + 5, (DISP_WIDTH * 2)/3, ROW_H, COLOR_UI_BTN, "8N1",       AlClicParamsUART, 0},
+    {DISP_WIDTH/3, ROW_2_Y + 2*(ROW_H + 5), (DISP_WIDTH * 2)/3, ROW_H, COLOR_UI_BTN, "LSB/Norm",  AlClicUARTLsbInv, 0},
+    {0, DISP_HEIGHT-30,     DISP_WIDTH/3,       ROW_H, COLOR_UI_BTN, "Back",      AlClicAtrasConfig, 0},
+    {DISP_WIDTH/3*2, DISP_HEIGHT-30, DISP_WIDTH/3, ROW_H, COLOR_UI_BTN, "Decode", AlClicDecodificar,     0},
 };
 
-// Table View Buttons
-Button_t table_view_buttons[1] = {
-    {0, DISP_HEIGHT-30, DISP_WIDTH/3, ROW_H, COLOR_UI_BTN, "Back", OnConfigBackClick, 0},
+// botones vista tabla
+Button_t botones_vista_tabla[1] = {
+    {0, DISP_HEIGHT-30, DISP_WIDTH/3, ROW_H, COLOR_UI_BTN, "Back", AlClicAtrasConfig, 0},
 };
 
-View_t views[] = {
-    [STATE_MAIN_MENU]       = {main_menu_buttons, 5, Draw_MainMenu},
-    [STATE_VIEWER]          = {viewer_buttons, 5, Draw_Viewer},
-    [STATE_SETTINGS]        = {settings_buttons, SETTINGS_CONF_SIZE, Draw_Settings},
-    [STATE_PROTOCOL_CONFIG] = {protocol_config_buttons, 7, Draw_ProtocolConfig},
-    [STATE_TABLE_VIEW]      = {table_view_buttons, 1, Draw_TableView},
+View_t vistas[] = {
+    [STATE_MAIN_MENU]       = {botones_menu_principal, 5, Dibujar_MenuPrincipal},
+    [STATE_VIEWER]          = {botones_visor, 5, Dibujar_Visor},
+    [STATE_SETTINGS]        = {botones_ajustes, SETTINGS_CONF_SIZE, Dibujar_Ajustes},
+    [STATE_PROTOCOL_CONFIG] = {botones_config_protocolo, 7, Dibujar_ConfigProtocolo},
+    [STATE_TABLE_VIEW]      = {botones_vista_tabla, 1, Dibujar_VistaTabla},
 };
 
-// Settings helpers
-void UpdateSettingsMenu(void) {
-    settings_buttons[0].text = (char*)Config_GetProtocolText(conf.protocol);
-    settings_buttons[1].text = (char*)Config_GetFreqText(conf.frequency);
-    settings_buttons[2].text = (char*)trigger_strings[config_global.flanco];
-    settings_buttons[3].text = (char*)Config_GetRadixText(conf.radix);
+// ayudantes de ajustes
+void ActualizarMenuAjustes(void) {
+    botones_ajustes[0].texto = (char*)Config_ObtenerTextoProtocolo(conf.protocolo);
+    botones_ajustes[1].texto = (char*)Config_ObtenerTextoFrec(conf.frecuencia);
+    botones_ajustes[2].texto = (char*)cadenas_disparo[config_global.flanco];
+    botones_ajustes[3].texto = (char*)Config_ObtenerTextoRadix(conf.radix);
 }
 
-void WipeButtons(){
-    DISP_FillRect(0, DISP_HEIGHT-30, DISP_WIDTH, 30, COLOR_BG_DARKER);
+void LimpiarBotones(){
+    DISP_LlenarRect(0, DISP_HEIGHT-30, DISP_WIDTH, 30, COLOR_BG_DARKER);
 }
 
-void WipeMain(){
-    DISP_FillRect(0, 18, DISP_WIDTH, DISP_HEIGHT - 30, COLOR_BG_DARK);
+void LimpiarPrincipal(){
+    DISP_LlenarRect(0, 18, DISP_WIDTH, DISP_HEIGHT - 30, COLOR_BG_DARK);
 }
 
-void DrawStatusBar(){
-    DISP_FillRect(0, 0, DISP_WIDTH, 18, COLOR_UI_STATUS);
+void DibujarBarraEstado(){
+    DISP_LlenarRect(0, 0, DISP_WIDTH, 18, COLOR_UI_STATUS);
     
-    const char* title = "SETTINGS";
-    switch(current_state) {
-        case STATE_MAIN_MENU: title = "MAIN MENU"; break;
-        case STATE_VIEWER: title = "SIGNAL"; break;
-        case STATE_SETTINGS: title = "SETTINGS"; break;
-        case STATE_PROTOCOL_CONFIG: title = "ANALYZER CONFIGURATION"; break;
-        case STATE_TABLE_VIEW: title = "DATA TABLE"; break;
+    const char* titulo = "SETTINGS";
+    switch(estado_actual) {
+        case STATE_MAIN_MENU: titulo = "MAIN MENU"; break;
+        case STATE_VIEWER: titulo = "SIGNAL"; break;
+        case STATE_SETTINGS: titulo = "SETTINGS"; break;
+        case STATE_PROTOCOL_CONFIG: titulo = "ANALYZER CONFIGURATION"; break;
+        case STATE_TABLE_VIEW: titulo = "DATA TABLE"; break;
     }
-    DISP_DrawCenteredText(DISP_WIDTH/3, 0, DISP_WIDTH/3, 18, title, COLOR_UI_STATUS_T, COLOR_UI_STATUS);
+    DISP_DibujarTextoCentrado(DISP_WIDTH/3, 0, DISP_WIDTH/3, 18, titulo, COLOR_UI_STATUS_T, COLOR_UI_STATUS);
 }
 
-// Draw callbacks
-void Draw_MainMenu(){
-    DISP_FillRect(0, 0, DISP_WIDTH, DISP_HEIGHT, COLOR_BG_DARK);
+// retrollamadas de dibujo
+void Dibujar_MenuPrincipal(){
+    DISP_LlenarRect(0, 0, DISP_WIDTH, DISP_HEIGHT, COLOR_BG_DARK);
     
-    // Labels on the left, buttons on the right
-    DISP_DrawCenteredText(0, 47, 140, 20, "Sampling Freq", COLOR_SIG_LABEL, COLOR_BG_DARK);
-    DISP_DrawCenteredText(0, 92, 140, 20, "Buffer Size (B)", COLOR_SIG_LABEL, COLOR_BG_DARK);
+    // etiquetas izquierda, botones derecha
+    DISP_DibujarTextoCentrado(0, 47, 140, 20, "Sampling Freq", COLOR_SIG_LABEL, COLOR_BG_DARK);
+    DISP_DibujarTextoCentrado(0, 92, 140, 20, "Buffer Size (B)", COLOR_SIG_LABEL, COLOR_BG_DARK);
     
-    main_menu_buttons[0].text = (char*)Config_GetFreqText(conf.frequency);
-    main_menu_buttons[1].text = (char*)Config_GetSizeText(conf.buffer_size);
+    botones_menu_principal[0].texto = (char*)Config_ObtenerTextoFrec(conf.frecuencia);
+    botones_menu_principal[1].texto = (char*)Config_ObtenerTextoTamaño(conf.tamaño_buffer);
     
-    if (has_captured) {
-        views[STATE_MAIN_MENU].buttonCount = 5;
+    if (ha_capturado) {
+        vistas[STATE_MAIN_MENU].conteoBotones = 5;
     } else {
-        views[STATE_MAIN_MENU].buttonCount = 4;
+        vistas[STATE_MAIN_MENU].conteoBotones = 4;
     }
     
-    View_t view = views[current_state];
-    for (int i = 0; i < view.buttonCount; i++) {
-        view.buttons[i].isActive = (i == selected_button_idx);
-        UI_DrawButton(&view.buttons[i]);
+    View_t vista = vistas[estado_actual];
+    for (int i = 0; i < vista.conteoBotones; i++) {
+        vista.botones[i].estaActivo = (i == indice_boton_seleccionado);
+        UI_DibujarBoton(&vista.botones[i]);
     }
 }
 
-static void Draw_ViewerStatic(void) {
-    DISP_FillRect(0, WAVE_Y_START, DISP_WIDTH, WAVE_AREA_HEIGHT, COLOR_BG_DARK);
-    DrawStatusBar();
+static void Dibujar_VisorEstatico(void) {
+    DISP_LlenarRect(0, WAVE_Y_START, DISP_WIDTH, WAVE_AREA_HEIGHT, COLOR_BG_DARK);
+    DibujarBarraEstado();
 
-    const ProtocolPinConfig_t *cfg = Config_GetPinConfig(conf.protocol);
-    uint16_t lane_height = GET_LANE_HEIGHT(cfg->num_active_channels);
+    const ProtocolPinConfig_t *cfg = Config_ObtenerConfigPin(conf.protocolo);
+    uint16_t alto_carril = GET_LANE_HEIGHT(cfg->num_canales_activos);
 
-    for (uint8_t ch = 0; ch < cfg->num_active_channels; ch++) {
-        uint16_t lane_y = WAVE_Y_START + ch * lane_height;
+    for (uint8_t ch = 0; ch < cfg->num_canales_activos; ch++) {
+        uint16_t carril_y = WAVE_Y_START + ch * alto_carril;
 
         if (ch > 0) {
-            DISP_DrawHLine(0, lane_y, DISP_WIDTH, WAVE_COLOR_SEP);
+            DISP_DibujarLineaH(0, carril_y, DISP_WIDTH, WAVE_COLOR_SEP);
         }
 
-        uint16_t label_y = lane_y + (lane_height / 2) - 6;
-        for (uint8_t i = 0; i < 4 && cfg->channels[ch].label[i] != '\0'; i++) {
-            DISP_DrawChar(2 + i * 8, label_y, cfg->channels[ch].label[i],
+        uint16_t etiqueta_y = carril_y + (alto_carril / 2) - 6;
+        for (uint8_t i = 0; i < 4 && cfg->canales[ch].etiqueta[i] != '\0'; i++) {
+            DISP_DibujarCaracter(2 + i * 8, etiqueta_y, cfg->canales[ch].etiqueta[i],
                           WAVE_COLOR_LABEL, COLOR_BG_DARK);
         }
     }
 }
 
 
-// Array of zoom divisors. Index 0 is 1/1 (no zoom out), higher indices zoom out more.
-const float zoom_divisors[] = {
+// arreglo de divisores de zoom. indice 0 es 1/1 (sin alejar), indices mayores alejan mas.
+const float divisores_zoom[] = {
     0.1f, 0.2f, 0.5f, 1.0f, 2.0f, 5.0f, 10.0f, 20.0f, 50.0f, 100.0f, 200.0f, 500.0f, 1000.0f, 2000.0f, 5000.0f, 10000.0f, 20000.0f, 50000.0f, 100000.0f
 };
-#define MAX_ZOOM_IDX (sizeof(zoom_divisors)/sizeof(zoom_divisors[0]) - 1)
+#define MAX_ZOOM_IDX (sizeof(divisores_zoom)/sizeof(divisores_zoom[0]) - 1)
 
-static void Draw_ViewerWaveforms(void) {
-    extern volatile uint32_t buffer_timestamps[];
-    uint32_t t_scroll = viewer_t_scroll;
+static void Dibujar_FormasOndaVisor(void) {
+    extern volatile uint32_t tiempos_buffer[];
+    uint32_t desplazamiento_t = desplazamiento_t_visor;
     
-    uint16_t first_visible = 0;
-    for (uint16_t i = 0; i < capture.total_samples; i++) {
-        if (buffer_timestamps[i] <= t_scroll) {
-            first_visible = i;
+    uint16_t primer_visible = 0;
+    for (uint16_t i = 0; i < captura.muestras_totales; i++) {
+        if (tiempos_buffer[i] <= desplazamiento_t) {
+            primer_visible = i;
         } else {
             break;
         }
     }
 
-    if (viewer_zoom > MAX_ZOOM_IDX) viewer_zoom = MAX_ZOOM_IDX;
-    float time_divisor = zoom_divisors[viewer_zoom];
+    if (zoom_visor > MAX_ZOOM_IDX) zoom_visor = MAX_ZOOM_IDX;
+    float divisor_tiempo = divisores_zoom[zoom_visor];
 
-    const ProtocolPinConfig_t *cfg = Config_GetPinConfig(conf.protocol);
-    uint16_t lane_height = GET_LANE_HEIGHT(cfg->num_active_channels);
+    const ProtocolPinConfig_t *cfg = Config_ObtenerConfigPin(conf.protocolo);
+    uint16_t alto_carril = GET_LANE_HEIGHT(cfg->num_canales_activos);
 
-    // --- Draw waveform signals ---
-    for (uint8_t ch = 0; ch < cfg->num_active_channels; ch++) {
-        uint16_t lane_y = WAVE_Y_START + ch * lane_height;
-        uint16_t high_y = WAVE_HIGH_Y(lane_y);
-        uint16_t low_y  = WAVE_LOW_Y(lane_y, lane_height);
+    // --- dibujar regla de tiempo ---
+    float ticks_objetivo = 80.0f * divisor_tiempo; // apuntar a ~80 pixeles entre marcas de tiempo
+    uint32_t pasos_agradables[] = {10, 20, 50, 100, 200, 500, 
+                             1000, 2000, 5000, 10000, 20000, 50000, 
+                             100000, 200000, 500000, 1000000, 2000000, 5000000, 10000000};
+    uint32_t paso_cuadricula = pasos_agradables[0];
+    for (int i = 0; i < sizeof(pasos_agradables)/sizeof(pasos_agradables[0]); i++) {
+        if (pasos_agradables[i] >= ticks_objetivo) {
+            paso_cuadricula = pasos_agradables[i];
+            break;
+        }
+    }
 
-        if (cfg->num_active_channels == 1) {
-            uint16_t orig_amp = low_y - high_y;
-            uint16_t mid_y = high_y + orig_amp / 2;
-            high_y = mid_y - orig_amp / 4;
-            low_y  = mid_y + orig_amp / 4;
+    uint32_t primer_t_cuadricula = ((desplazamiento_t + paso_cuadricula - 1) / paso_cuadricula) * paso_cuadricula;
+    for (uint32_t t = primer_t_cuadricula; ; t += paso_cuadricula) {
+        int32_t px = LABEL_WIDTH + (int32_t)((t - desplazamiento_t) / divisor_tiempo);
+        if (px >= DISP_WIDTH) break;
+        
+        for (uint16_t yy = WAVE_Y_START; yy < WAVE_Y_END; yy += 4) {
+            DISP_DibujarLineaV(px, yy, 2, COLOR_SIG_SEP);
+        }
+        
+        char ts_str[16];
+        if (paso_cuadricula >= 1000000) {
+            uint32_t s = t / 1000000;
+            uint32_t ds = (t % 1000000) / 100000;
+            if (ds > 0) snprintf(ts_str, sizeof(ts_str), "%u.%us", (unsigned int)s, (unsigned int)ds);
+            else snprintf(ts_str, sizeof(ts_str), "%us", (unsigned int)s);
+        } else if (paso_cuadricula >= 1000) {
+            uint32_t ms = t / 1000;
+            uint32_t dms = (t % 1000) / 100;
+            if (dms > 0) snprintf(ts_str, sizeof(ts_str), "%u.%ums", (unsigned int)ms, (unsigned int)dms);
+            else snprintf(ts_str, sizeof(ts_str), "%ums", (unsigned int)ms);
+        } else {
+            snprintf(ts_str, sizeof(ts_str), "%uus", (unsigned int)t);
+        }
+        
+        DISP_DibujarCadena(px + 2, WAVE_Y_END - 10, ts_str, COLOR_SIG_LABEL, COLOR_BG_DARK);
+    }
+
+    // --- dibujar señales de formas de onda ---
+    for (uint8_t ch = 0; ch < cfg->num_canales_activos; ch++) {
+        uint16_t carril_y = WAVE_Y_START + ch * alto_carril;
+        uint16_t y_alto = WAVE_HIGH_Y(carril_y);
+        uint16_t y_bajo  = WAVE_LOW_Y(carril_y, alto_carril);
+
+        if (cfg->num_canales_activos == 1) {
+            uint16_t amp_orig = y_bajo - y_alto;
+            uint16_t y_medio = y_alto + amp_orig / 2;
+            y_alto = y_medio - amp_orig / 4;
+            y_bajo  = y_medio + amp_orig / 4;
         }
 
-        uint8_t  run_state = capture.samples[ch][first_visible];
-        uint16_t run_x0    = LABEL_WIDTH;
-        uint16_t run_y     = run_state ? high_y : low_y;
+        uint8_t  estado_ejecucion = captura.muestras[ch][primer_visible];
+        uint16_t ejecucion_x0    = LABEL_WIDTH;
+        uint16_t ejecucion_y     = estado_ejecucion ? y_alto : y_bajo;
 
-        for (uint16_t s = first_visible + 1; s < capture.total_samples; s++) {
-            // Using int32_t for diff to handle wrap-around gracefully
-            int32_t t_diff = (int32_t)(buffer_timestamps[s] - t_scroll);
-            if (t_diff < 0) t_diff = 0; // fallback if somehow negative
+        for (uint16_t s = primer_visible + 1; s < captura.muestras_totales; s++) {
+            // usando int32_t para diferencia
+            int32_t diferencia_t = (int32_t)(tiempos_buffer[s] - desplazamiento_t);
+            if (diferencia_t < 0) diferencia_t = 0; // alternativa si es negativo
             
-            uint32_t px32 = LABEL_WIDTH + (t_diff) / time_divisor;
+            uint32_t px32 = LABEL_WIDTH + (diferencia_t) / divisor_tiempo;
             uint16_t pixel_x = (px32 > DISP_WIDTH) ? DISP_WIDTH : (uint16_t)px32;
 
-            uint8_t cur_state = capture.samples[ch][s];
+            uint8_t estado_actual = captura.muestras[ch][s];
 
-            if (cur_state != run_state || pixel_x >= DISP_WIDTH) {
-                // Draw horizontal run
-                uint16_t run_len = pixel_x - run_x0;
-                if (run_len > 0) {
-                    DISP_DrawHLine(run_x0, run_y, run_len, run_state ? WAVE_COLOR_HIGH : WAVE_COLOR_LOW);
+            if (estado_actual != estado_ejecucion || pixel_x >= DISP_WIDTH) {
+                // dibujar tramo horizontal
+                uint16_t longitud_ejecucion = pixel_x - ejecucion_x0;
+                if (longitud_ejecucion > 0) {
+                    DISP_DibujarLineaH(ejecucion_x0, ejecucion_y, longitud_ejecucion, estado_ejecucion ? WAVE_COLOR_HIGH : WAVE_COLOR_LOW);
                 }
 
-                // Draw vertical transition edge
-                if (pixel_x < DISP_WIDTH && cur_state != run_state) {
-                    uint16_t new_y = cur_state ? high_y : low_y;
-                    uint16_t top   = (new_y < run_y) ? new_y : run_y;
-                    uint16_t h     = (new_y > run_y) ? (new_y - run_y + 1) : (run_y - new_y + 1);
-                    DISP_DrawVLine(pixel_x, top, h, cur_state ? WAVE_COLOR_HIGH : WAVE_COLOR_LOW);
+                // dibujar transicion vertical
+                if (pixel_x < DISP_WIDTH && estado_actual != estado_ejecucion) {
+                    uint16_t nueva_y = estado_actual ? y_alto : y_bajo;
+                    uint16_t arriba   = (nueva_y < ejecucion_y) ? nueva_y : ejecucion_y;
+                    uint16_t h     = (nueva_y > ejecucion_y) ? (nueva_y - ejecucion_y + 1) : (ejecucion_y - nueva_y + 1);
+                    DISP_DibujarLineaV(pixel_x, arriba, h, estado_actual ? WAVE_COLOR_HIGH : WAVE_COLOR_LOW);
                 }
 
-                run_state = cur_state;
-                run_x0    = pixel_x;
-                run_y     = cur_state ? high_y : low_y;
+                estado_ejecucion = estado_actual;
+                ejecucion_x0    = pixel_x;
+                ejecucion_y     = estado_actual ? y_alto : y_bajo;
             }
 
             if (pixel_x >= DISP_WIDTH) break;
         }
 
-        // Flush remaining if we didn't reach edge of screen
-        if (run_x0 < DISP_WIDTH) {
-            DISP_DrawHLine(run_x0, run_y, DISP_WIDTH - run_x0, run_state ? WAVE_COLOR_HIGH : WAVE_COLOR_LOW);
+        // limpiar restante si no llegamos al borde de pantalla
+        if (ejecucion_x0 < DISP_WIDTH) {
+            DISP_DibujarLineaH(ejecucion_x0, ejecucion_y, DISP_WIDTH - ejecucion_x0, estado_ejecucion ? WAVE_COLOR_HIGH : WAVE_COLOR_LOW);
         }
     }
 
-    // --- Draw Decoder: bit-grid + packet delimiters + HEX label ---
-    extern volatile uint32_t decoded_idx;
-    extern volatile uint8_t  decoded_buffer[];
-    extern volatile uint32_t decoded_start_timestamps[];
-    extern volatile uint32_t decoded_end_timestamps[];
+    // --- dibujar decodificador ---
+    extern volatile uint32_t indice_decodificado;
+    extern volatile uint8_t  buffer_decodificado[];
+    extern volatile uint32_t tiempos_inicio_decodificados[];
+    extern volatile uint32_t tiempos_fin_decodificados[];
 
-    // Compute bit width in ticks.
-    // TIM2 PSC=83 → TIMER_FREQ_HZ = 84MHz/84 = 1 MHz (1 tick = 1 µs)
-    // This MUST match the same formula used in uart.c: TIMER_FREQ_HZ / baudrate
-    uint32_t baud = 0;
-    if (conf.protocol == UART) {
-        baud = config_global.protocolo.settings.uart.baudrate;
+    // calcular ancho de bit en ticks
+    // tim2 psc=83 -> timer_freq_hz = 1 mhz
+    // esto debe coincidir con formula en uart.c: timer_freq_hz / tasa_baudios
+    uint32_t baudios = 0;
+    if (conf.protocolo == UART) {
+        baudios = config_global.protocolo.ajustes.uart.tasa_baudios;
     }
 
-    for (uint32_t i = 0; i < decoded_idx; i++) {
-        uint32_t t_start = decoded_start_timestamps[i];
-        uint32_t t_end   = decoded_end_timestamps[i];
+    for (uint32_t i = 0; i < indice_decodificado; i++) {
+        uint32_t inicio_t = tiempos_inicio_decodificados[i];
+        uint32_t fin_t   = tiempos_fin_decodificados[i];
 
-        // Compute pixel positions
-        int32_t ds = (int32_t)(t_start - t_scroll);
-        int32_t de = (int32_t)(t_end   - t_scroll);
+        // calcular posiciones de pixeles
+        int32_t ds = (int32_t)(inicio_t - desplazamiento_t);
+        int32_t de = (int32_t)(fin_t   - desplazamiento_t);
 
-        if (conf.protocol == SPI) {
-            uint8_t data_size = config_global.protocolo.settings.spi.data_size;
-            if (data_size > 1 && t_end > t_start) {
-                uint32_t dt_bit = (t_end - t_start) / (data_size - 1);
-                ds -= (int32_t)(dt_bit / 2);
-                de += (int32_t)(dt_bit / 2);
+        if (conf.protocolo == SPI) {
+            uint8_t tamaño_datos = config_global.protocolo.ajustes.spi.tamaño_datos;
+            if (tamaño_datos > 1 && fin_t > inicio_t) {
+                float dt_bit = (float)(fin_t - inicio_t) / (tamaño_datos - 1);
+                ds -= (int32_t)(dt_bit / 2.0f);
+                de += (int32_t)(dt_bit / 2.0f);
             }
         }
 
-        // Skip if entirely before viewport
+        // omitir si esta antes de la vista
         if (de < 0) continue;
 
-        uint16_t px_start = (ds < 0) ? LABEL_WIDTH
-                          : (uint16_t)((uint32_t)ds / time_divisor + LABEL_WIDTH);
-        uint16_t px_end   = (uint16_t)((uint32_t)(de > 0 ? de : 0) / time_divisor + LABEL_WIDTH);
+        uint16_t px_inicio = (ds < 0) ? LABEL_WIDTH
+                          : (uint16_t)((uint32_t)ds / divisor_tiempo + LABEL_WIDTH);
+        uint16_t px_fin   = (uint16_t)((uint32_t)(de > 0 ? de : 0) / divisor_tiempo + LABEL_WIDTH);
 
-        if (px_start >= DISP_WIDTH) continue;   // entirely beyond viewport
-        if (px_end   >  DISP_WIDTH) px_end = DISP_WIDTH;
+        if (px_inicio >= DISP_WIDTH) continue;   // totalmente fuera de la vista
+        if (px_fin   >  DISP_WIDTH) px_fin = DISP_WIDTH;
 
-        // Determine active lane for gridlines
-        uint16_t lane_top = WAVE_Y_START;
-        uint16_t lane_bottom;
+        // determinar carril activo para cuadricula
+        uint16_t carril_arriba = WAVE_Y_START;
+        uint16_t carril_abajo;
         
-        if (conf.protocol == SPI) {
-            lane_bottom = WAVE_Y_START + cfg->num_active_channels * lane_height;
+        if (conf.protocolo == SPI) {
+            carril_abajo = WAVE_Y_START + cfg->num_canales_activos * alto_carril;
         } else {
-            lane_bottom = lane_top + lane_height;
+            carril_abajo = carril_arriba + alto_carril;
         }
 
-        // 1. Bit-width grid (gray dotted vertical lines every ticks_per_bit)
-        if (conf.protocol == UART && baud > 0) {
-            uint8_t parity_bits = (config_global.protocolo.settings.uart.paridad == UART_PARITY_SIN) ? 0 : 1;
-            uint8_t stop_bits = (config_global.protocolo.settings.uart.stop_bits == UART_STOPBITS_2) ? 2 : 1;
-            uint8_t total_bits = 1 + config_global.protocolo.settings.uart.data_bits + parity_bits + stop_bits;
-            
-            for (uint8_t bit = 1; bit < total_bits; bit++) { // start at 1, don't draw over start/end red lines
-                int32_t dt_bit = (int32_t)((t_start + (uint32_t)(((uint64_t)bit * TIMER_FREQ_HZ) / baud)) - t_scroll);
-                if (dt_bit < 0) continue;
-                uint16_t px_bit = (uint16_t)((uint32_t)dt_bit / time_divisor + LABEL_WIDTH);
-                if (px_bit >= DISP_WIDTH) break;
-                // Draw every other pixel for dashed effect
-                for (uint16_t yy = lane_top; yy < lane_bottom; yy += 2) {
-                    DISP_DrawVLine(px_bit, yy, 1, 0x632C);
+        // 1. cuadricula de ancho de bits
+        if (conf.protocolo == UART && baudios > 0) {
+            uint32_t ticks_por_bit = TIMER_FREQ_HZ / baudios;
+            if ((float)ticks_por_bit / divisor_tiempo > 3.0f) {
+                uint8_t bits_paridad = (config_global.protocolo.ajustes.uart.paridad == UART_PARITY_SIN) ? 0 : 1;
+                uint8_t bits_parada = (config_global.protocolo.ajustes.uart.bits_parada == UART_STOPBITS_2) ? 2 : 1;
+                uint8_t bits_totales = 1 + config_global.protocolo.ajustes.uart.bits_datos + bits_paridad + bits_parada;
+                
+                for (uint8_t bit = 1; bit < bits_totales; bit++) { // empezar en 1, no dibujar sobre lineas rojas de inicio/fin
+                    int32_t dt_bit = (int32_t)((inicio_t + (uint32_t)(((uint64_t)bit * TIMER_FREQ_HZ) / baudios)) - desplazamiento_t);
+                    if (dt_bit < 0) continue;
+                    uint16_t px_bit = (uint16_t)((uint32_t)dt_bit / divisor_tiempo + LABEL_WIDTH);
+                    if (px_bit >= DISP_WIDTH) break;
+                    // dibujar un pixel si y otro no para efecto punteado
+                    for (uint16_t yy = carril_arriba; yy < carril_abajo; yy += 2) {
+                        DISP_DibujarLineaV(px_bit, yy, 1, 0x632C);
+                    }
                 }
             }
-        } else if (conf.protocol == SPI) {
-            uint8_t data_size = config_global.protocolo.settings.spi.data_size;
-            if (data_size > 1 && t_end > t_start) {
-                uint32_t dt_bit = (t_end - t_start) / (data_size - 1);
-                for (uint8_t bit = 1; bit < data_size; bit++) {
-                    int32_t dt_grid = (int32_t)((t_start + bit * dt_bit - dt_bit / 2) - t_scroll);
-                    if (dt_grid < 0) continue;
-                    uint16_t px_bit = (uint16_t)((uint32_t)dt_grid / time_divisor + LABEL_WIDTH);
-                    if (px_bit >= DISP_WIDTH) break;
-                    // Draw every other pixel for dashed effect
-                    for (uint16_t yy = lane_top; yy < lane_bottom; yy += 2) {
-                        DISP_DrawVLine(px_bit, yy, 1, 0x632C);
+        } else if (conf.protocolo == SPI) {
+            uint8_t tamaño_datos = config_global.protocolo.ajustes.spi.tamaño_datos;
+            if (tamaño_datos > 1 && fin_t > inicio_t) {
+                float dt_bit = (float)(fin_t - inicio_t) / (tamaño_datos - 1);
+                if (dt_bit / divisor_tiempo > 3.0f) {
+                    for (uint8_t bit = 1; bit < tamaño_datos; bit++) {
+                        int32_t dt_cuadricula = (int32_t)(inicio_t + bit * dt_bit - dt_bit / 2.0f - desplazamiento_t);
+                        if (dt_cuadricula < 0) continue;
+                        uint16_t px_bit = (uint16_t)((float)dt_cuadricula / divisor_tiempo + LABEL_WIDTH);
+                        if (px_bit >= DISP_WIDTH) break;
+                        // dibujar un pixel si y otro no para efecto punteado
+                        for (uint16_t yy = carril_arriba; yy < carril_abajo; yy += 2) {
+                            DISP_DibujarLineaV(px_bit, yy, 1, 0x632C);
+                        }
                     }
                 }
             }
         }
 
-        // 2. Red dashed vertical line at packet start and end
-        for (uint16_t yy = lane_top; yy < lane_bottom; yy += 4) {
-            if (px_start < DISP_WIDTH) {
-                DISP_DrawVLine(px_start, yy, 2, COLOR_UI_REC);
+        // 2. linea vertical roja punteada inicio y fin paquete
+        for (uint16_t yy = carril_arriba; yy < carril_abajo; yy += 4) {
+            if (px_inicio < DISP_WIDTH) {
+                DISP_DibujarLineaV(px_inicio, yy, 2, COLOR_UI_REC);
             }
-            if (px_end < DISP_WIDTH) {
-                // Don't draw the end line if there's another packet immediately following it
-                uint8_t draw_end = 1;
-                if (i + 1 < decoded_idx && decoded_start_timestamps[i+1] == t_end) {
-                    draw_end = 0;
+            if (px_fin < DISP_WIDTH) {
+                // no dibujar linea final si hay otro paquete despues
+                uint8_t fin_dibujo = 1;
+                if (i + 1 < indice_decodificado && tiempos_inicio_decodificados[i+1] == fin_t) {
+                    fin_dibujo = 0;
                 }
-                if (draw_end) DISP_DrawVLine(px_end, yy, 2, COLOR_UI_REC);
+                if (fin_dibujo) DISP_DibujarLineaV(px_fin, yy, 2, COLOR_UI_REC);
             }
         }
 
-        // 3. HEX label drawn on top of signal in first lane — no fill, text only
-        uint16_t label_width = px_end - px_start;
-        if (label_width > 10) {
-            char valStr[5];
-            uint8_t radix_mode = conf.radix;
-            if (radix_mode == RADIX_HEX)
-                snprintf(valStr, sizeof(valStr), "%02X", decoded_buffer[i]);
-            else if (radix_mode == RADIX_DEC)
-                snprintf(valStr, sizeof(valStr), "%u",  decoded_buffer[i]);
+        // 3. etiqueta hex dibujada arriba de señal
+        uint16_t ancho_etiqueta = px_fin - px_inicio;
+        if (ancho_etiqueta > 10) {
+            char cadenaValor[5];
+            uint8_t modo_radix = conf.radix;
+            if (modo_radix == RADIX_HEX)
+                snprintf(cadenaValor, sizeof(cadenaValor), "%02X", buffer_decodificado[i]);
+            else if (modo_radix == RADIX_DEC)
+                snprintf(cadenaValor, sizeof(cadenaValor), "%u",  buffer_decodificado[i]);
             else {
-                uint8_t c = decoded_buffer[i];
+                uint8_t c = buffer_decodificado[i];
                 if (c >= 32 && c <= 126)
-                    snprintf(valStr, sizeof(valStr), "'%c'", c);
+                    snprintf(cadenaValor, sizeof(cadenaValor), "'%c'", c);
                 else
-                    snprintf(valStr, sizeof(valStr), "%02X", c);
+                    snprintf(cadenaValor, sizeof(cadenaValor), "%02X", c);
             }
-            // Draw centered in the packet span on the top of wave area (just below status bar)
-            uint16_t label_y = WAVE_Y_START + 2;
-            DISP_DrawString(px_start + 2, label_y, valStr, COLOR_UI_ACCENT, COLOR_BG_DARK);
+            // dibujar centrado en el paquete en la zona superior de ondas
+            uint16_t etiqueta_y = WAVE_Y_START + 2;
+            DISP_DibujarCadena(px_inicio + 2, etiqueta_y, cadenaValor, COLOR_UI_ACCENT, COLOR_BG_DARK);
         }
     }
 }
 
 
 
-void Draw_Viewer(){
-    uint8_t full_redraw_copy = viewer_needs_full_redraw;
-    if (viewer_needs_full_redraw) {
-        DISP_FillRect(0, 0, DISP_WIDTH, DISP_HEIGHT, COLOR_BG_DARK);
-        Draw_ViewerStatic();
-        viewer_needs_full_redraw = 0;
+void Dibujar_Visor(){
+    uint8_t copia_redibujo_completo = visor_necesita_redibujo_completo;
+    if (visor_necesita_redibujo_completo) {
+        DISP_LlenarRect(0, 0, DISP_WIDTH, DISP_HEIGHT, COLOR_BG_DARK);
+        Dibujar_VisorEstatico();
+        visor_necesita_redibujo_completo = 0;
     } else {
-        // Clear only the waveform area (skip labels/separators)
-        DISP_FillRect(LABEL_WIDTH, WAVE_Y_START, DISP_WIDTH - LABEL_WIDTH, WAVE_AREA_HEIGHT, COLOR_BG_DARK);
+        // limpiar solo area de ondas
+        DISP_LlenarRect(LABEL_WIDTH, WAVE_Y_START, DISP_WIDTH - LABEL_WIDTH, WAVE_AREA_HEIGHT, COLOR_BG_DARK);
     }
 
-    Draw_ViewerWaveforms();
+    Dibujar_FormasOndaVisor();
 
-    // Update zoom/scroll mode button
-    viewer_buttons[4].text = encoder_zoom_mode ? "Z" : "S";
+    // actualizar boton modo zoom/scroll
+    botones_visor[4].texto = modo_zoom_encoder ? "Z" : "S";
 
-    // Only draw buttons again if we did a full redraw, otherwise they might flicker
-    // except for the mode toggle button which might have changed text
-    static uint8_t last_encoder_zoom_mode = 0xFF;
-    if (full_redraw_copy) {
-        View_t view = views[current_state];
-        for (int i = 0; i < view.buttonCount; i++) {
-            view.buttons[i].isActive = (i == selected_button_idx);
-        UI_DrawButton(&view.buttons[i]);
+    // solo dibujar botones de nuevo si hubo redibujo completo
+    // excepto boton de cambio de modo cuyo texto pudo cambiar
+    static uint8_t ultimo_modo_zoom_encoder = 0xFF;
+    if (copia_redibujo_completo) {
+        View_t vista = vistas[estado_actual];
+        for (int i = 0; i < vista.conteoBotones; i++) {
+            vista.botones[i].estaActivo = (i == indice_boton_seleccionado);
+        UI_DibujarBoton(&vista.botones[i]);
         }
-    } else if (last_encoder_zoom_mode != encoder_zoom_mode) {
-        UI_DrawButton(&viewer_buttons[4]);
+    } else if (ultimo_modo_zoom_encoder != modo_zoom_encoder) {
+        UI_DibujarBoton(&botones_visor[4]);
     }
-    last_encoder_zoom_mode = encoder_zoom_mode;
+    ultimo_modo_zoom_encoder = modo_zoom_encoder;
 }
 
-void Draw_Settings(){
-    WipeMain();
-    DISP_FillRect(0, 40, DISP_WIDTH, 30, COLOR_UI_ACCENT);
+void Dibujar_Ajustes(){
+    LimpiarPrincipal();
+    DISP_LlenarRect(0, 40, DISP_WIDTH, 30, COLOR_UI_ACCENT);
 
-    DISP_DrawCenteredText(0, ROW_0_Y, DISP_WIDTH/3, ROW_H, "Protocol",  COLOR_BG_DARK, COLOR_UI_ACCENT);
-    DISP_DrawCenteredText(0, ROW_1_Y, DISP_WIDTH/3, ROW_H, "Frequency", COLOR_BG_DARK, COLOR_UI_ACCENT);
-    DISP_DrawCenteredText(0, ROW_2_Y, DISP_WIDTH/3, ROW_H, "Trigger",   COLOR_BG_DARK, COLOR_UI_ACCENT);
-    DISP_DrawCenteredText(0, ROW_2_Y + ROW_H + 5, DISP_WIDTH/3, ROW_H, "Radix",     COLOR_BG_DARK, COLOR_UI_ACCENT);
+    DISP_DibujarTextoCentrado(0, ROW_0_Y, DISP_WIDTH/3, ROW_H, "Protocol",  COLOR_BG_DARK, COLOR_UI_ACCENT);
+    DISP_DibujarTextoCentrado(0, ROW_1_Y, DISP_WIDTH/3, ROW_H, "Frequency", COLOR_BG_DARK, COLOR_UI_ACCENT);
+    DISP_DibujarTextoCentrado(0, ROW_2_Y, DISP_WIDTH/3, ROW_H, "Trigger",   COLOR_BG_DARK, COLOR_UI_ACCENT);
+    DISP_DibujarTextoCentrado(0, ROW_2_Y + ROW_H + 5, DISP_WIDTH/3, ROW_H, "Radix",     COLOR_BG_DARK, COLOR_UI_ACCENT);
 
-    DrawStatusBar();
-    WipeButtons();
+    DibujarBarraEstado();
+    LimpiarBotones();
 
-    UpdateSettingsMenu();
+    ActualizarMenuAjustes();
 
-    View_t view = views[current_state];
-    for (int i = 0; i < view.buttonCount; i++) {
-        view.buttons[i].isActive = (i == selected_button_idx);
-        UI_DrawButton(&view.buttons[i]);
+    View_t vista = vistas[estado_actual];
+    for (int i = 0; i < vista.conteoBotones; i++) {
+        vista.botones[i].estaActivo = (i == indice_boton_seleccionado);
+        UI_DibujarBoton(&vista.botones[i]);
     }
 }
 
-void Draw_ProtocolConfig(){
-    DISP_FillRect(0, 0, DISP_WIDTH, DISP_HEIGHT, COLOR_BG_DARK);
-    DISP_FillRect(0, 40, DISP_WIDTH, 30, COLOR_UI_ACCENT);
+void Dibujar_ConfigProtocolo(){
+    DISP_LlenarRect(0, 0, DISP_WIDTH, DISP_HEIGHT, COLOR_BG_DARK);
+    DISP_LlenarRect(0, 40, DISP_WIDTH, 30, COLOR_UI_ACCENT);
 
-    DISP_DrawCenteredText(0, ROW_0_Y, DISP_WIDTH/3, ROW_H, "Protocol",  COLOR_BG_DARK, COLOR_UI_ACCENT);
+    DISP_DibujarTextoCentrado(0, ROW_0_Y, DISP_WIDTH/3, ROW_H, "Protocol",  COLOR_BG_DARK, COLOR_UI_ACCENT);
     
-    // Update buttons texts based on configuration
-    protocol_config_buttons[0].text = (char*)Config_GetProtocolText(conf.protocol);
+    // actualizar textos de botones segun configuracion
+    botones_config_protocolo[0].texto = (char*)Config_ObtenerTextoProtocolo(conf.protocolo);
     
-    if (conf.protocol == UART) {
-        DISP_DrawCenteredText(0, ROW_1_Y, DISP_WIDTH/3, ROW_H, "Baudrate", COLOR_SIG_LABEL, COLOR_BG_DARK);
-        protocol_config_buttons[1].text = config_global.protocolo.settings.uart.baudrate == 9600 ? "9600" : "115200";
-    } else if (conf.protocol == SPI) {
-        DISP_DrawCenteredText(0, ROW_1_Y, DISP_WIDTH/3, ROW_H, "Mode", COLOR_SIG_LABEL, COLOR_BG_DARK);
+    if (conf.protocolo == UART) {
+        DISP_DibujarTextoCentrado(0, ROW_1_Y, DISP_WIDTH/3, ROW_H, "Baudrate", COLOR_SIG_LABEL, COLOR_BG_DARK);
+        botones_config_protocolo[1].texto = config_global.protocolo.ajustes.uart.tasa_baudios == 9600 ? "9600" : "115200";
+    } else if (conf.protocolo == SPI) {
+        DISP_DibujarTextoCentrado(0, ROW_1_Y, DISP_WIDTH/3, ROW_H, "Mode", COLOR_SIG_LABEL, COLOR_BG_DARK);
         static char spi_mode_str[16];
-        snprintf(spi_mode_str, sizeof(spi_mode_str), "Mode %d", config_global.protocolo.settings.spi.mode);
-        protocol_config_buttons[1].text = spi_mode_str;
+        snprintf(spi_mode_str, sizeof(spi_mode_str), "Mode %d", config_global.protocolo.ajustes.spi.modo);
+        botones_config_protocolo[1].texto = spi_mode_str;
     } else {
-        DISP_DrawCenteredText(0, ROW_1_Y, DISP_WIDTH/3, ROW_H, "Setting", COLOR_SIG_LABEL, COLOR_BG_DARK);
-        protocol_config_buttons[1].text = "N/A";
+        DISP_DibujarTextoCentrado(0, ROW_1_Y, DISP_WIDTH/3, ROW_H, "Setting", COLOR_SIG_LABEL, COLOR_BG_DARK);
+        botones_config_protocolo[1].texto = "N/A";
     }
 
-    DISP_DrawCenteredText(0, ROW_2_Y, DISP_WIDTH/3, ROW_H, "Radix", COLOR_SIG_LABEL, COLOR_BG_DARK);
-    protocol_config_buttons[2].text = (char*)Config_GetRadixText(conf.radix);
+    DISP_DibujarTextoCentrado(0, ROW_2_Y, DISP_WIDTH/3, ROW_H, "Radix", COLOR_SIG_LABEL, COLOR_BG_DARK);
+    botones_config_protocolo[2].texto = (char*)Config_ObtenerTextoRadix(conf.radix);
     
-    if (conf.protocol == UART) {
-        views[STATE_PROTOCOL_CONFIG].buttonCount = 7;
-        DISP_DrawCenteredText(0, ROW_2_Y + ROW_H + 5, DISP_WIDTH/3, ROW_H, "Format", COLOR_SIG_LABEL, COLOR_BG_DARK);
+    if (conf.protocolo == UART) {
+        vistas[STATE_PROTOCOL_CONFIG].conteoBotones = 7;
+        DISP_DibujarTextoCentrado(0, ROW_2_Y + ROW_H + 5, DISP_WIDTH/3, ROW_H, "Format", COLOR_SIG_LABEL, COLOR_BG_DARK);
         
         static char uart_fmt_str[8];
-        char p = config_global.protocolo.settings.uart.paridad == UART_PARITY_SIN ? 'N' : (config_global.protocolo.settings.uart.paridad == UART_PARITY_PAR ? 'E' : 'O');
-        char s = config_global.protocolo.settings.uart.stop_bits == UART_STOPBITS_2 ? '2' : '1';
-        snprintf(uart_fmt_str, sizeof(uart_fmt_str), "%d%c%c", config_global.protocolo.settings.uart.data_bits, p, s);
-        protocol_config_buttons[3].text = uart_fmt_str;
+        char p = config_global.protocolo.ajustes.uart.paridad == UART_PARITY_SIN ? 'N' : (config_global.protocolo.ajustes.uart.paridad == UART_PARITY_PAR ? 'E' : 'O');
+        char s = config_global.protocolo.ajustes.uart.bits_parada == UART_STOPBITS_2 ? '2' : '1';
+        snprintf(uart_fmt_str, sizeof(uart_fmt_str), "%d%c%c", config_global.protocolo.ajustes.uart.bits_datos, p, s);
+        botones_config_protocolo[3].texto = uart_fmt_str;
         
-        DISP_DrawCenteredText(0, ROW_2_Y + 2*(ROW_H + 5), DISP_WIDTH/3, ROW_H, "LSB/Inv", COLOR_SIG_LABEL, COLOR_BG_DARK);
+        DISP_DibujarTextoCentrado(0, ROW_2_Y + 2*(ROW_H + 5), DISP_WIDTH/3, ROW_H, "LSB/Inv", COLOR_SIG_LABEL, COLOR_BG_DARK);
         
         static char uart_lsb_str[16];
-        snprintf(uart_lsb_str, sizeof(uart_lsb_str), "%s %s", config_global.protocolo.settings.uart.lsb_first ? "LSB" : "MSB", config_global.protocolo.settings.uart.inverted ? "INV" : "NRM");
-        protocol_config_buttons[4].text = uart_lsb_str;
+        snprintf(uart_lsb_str, sizeof(uart_lsb_str), "%s %s", config_global.protocolo.ajustes.uart.lsb_primero ? "LSB" : "MSB", config_global.protocolo.ajustes.uart.invertido ? "INV" : "NRM");
+        botones_config_protocolo[4].texto = uart_lsb_str;
     } else {
-        views[STATE_PROTOCOL_CONFIG].buttonCount = 7;
-        protocol_config_buttons[3].text = "";
-        protocol_config_buttons[4].text = "";
+        vistas[STATE_PROTOCOL_CONFIG].conteoBotones = 7;
+        botones_config_protocolo[3].texto = "";
+        botones_config_protocolo[4].texto = "";
     }
 
-    DrawStatusBar();
+    DibujarBarraEstado();
 
-    View_t view = views[current_state];
-    for (int i = 0; i < view.buttonCount; i++) {
-        if (view.buttons[i].text[0] != '\0') {
-            view.buttons[i].isActive = (i == selected_button_idx);
-        UI_DrawButton(&view.buttons[i]);
+    View_t vista = vistas[estado_actual];
+    for (int i = 0; i < vista.conteoBotones; i++) {
+        if (vista.botones[i].texto[0] != '\0') {
+            vista.botones[i].estaActivo = (i == indice_boton_seleccionado);
+        UI_DibujarBoton(&vista.botones[i]);
         }
     }
 }
 
-extern volatile uint8_t decoded_buffer[];
-extern volatile uint32_t decoded_idx;
+extern volatile uint8_t buffer_decodificado[];
+extern volatile uint32_t indice_decodificado;
 
-int16_t table_scroll = 0;   // row index of first visible decoded entry
+int16_t desplazamiento_tabla = 0;   // indice de fila de primera entrada decodificada visible
 
-void Draw_TableView(){
-    extern volatile uint32_t decoded_start_timestamps[];
-    WipeMain();
-    DrawStatusBar();
-    WipeButtons();
+void Dibujar_VistaTabla(){
+    extern volatile uint32_t tiempos_inicio_decodificados[];
+    LimpiarPrincipal();
+    DibujarBarraEstado();
+    LimpiarBotones();
 
     #define TABLE_ROW_H   14
     #define TABLE_FIRST_Y 38
     #define TABLE_ROWS_VISIBLE  ((DISP_HEIGHT - 40 - TABLE_FIRST_Y) / TABLE_ROW_H)
 
-    if (decoded_idx == 0) {
-        DISP_DrawCenteredText(0, 50, DISP_WIDTH, 20, "No data decoded yet.", COLOR_SIG_LABEL, COLOR_BG_DARK);
+    if (indice_decodificado == 0) {
+        DISP_DibujarTextoCentrado(0, 50, DISP_WIDTH, 20, "No datos decoded yet.", COLOR_SIG_LABEL, COLOR_BG_DARK);
     } else {
-        // Clamp scroll
-        int16_t max_scroll = (int16_t)decoded_idx - TABLE_ROWS_VISIBLE;
-        if (max_scroll < 0) max_scroll = 0;
-        if (table_scroll > max_scroll) table_scroll = max_scroll;
-        if (table_scroll < 0) table_scroll = 0;
+        // limitar desplazamiento
+        int16_t desplazamiento_max = (int16_t)indice_decodificado - TABLE_ROWS_VISIBLE;
+        if (desplazamiento_max < 0) desplazamiento_max = 0;
+        if (desplazamiento_tabla > desplazamiento_max) desplazamiento_tabla = desplazamiento_max;
+        if (desplazamiento_tabla < 0) desplazamiento_tabla = 0;
 
-        char buf[64];
-        uint16_t row_y = TABLE_FIRST_Y;
+        char buffer[64];
+        uint16_t fila_y = TABLE_FIRST_Y;
         
-        // Draw Header
-        DISP_DrawString(5, row_y, "#    Time(t)      HEX  ASCII", COLOR_UI_ACCENT, COLOR_BG_DARK);
-        row_y += TABLE_ROW_H;
+        // dibujar encabezado
+        DISP_DibujarCadena(5, fila_y, "#    Time(t)      HEX  ASCII", COLOR_UI_ACCENT, COLOR_BG_DARK);
+        fila_y += TABLE_ROW_H;
 
-        for (uint32_t i = (uint32_t)table_scroll; i < decoded_idx; i++) {
-            if (row_y + TABLE_ROW_H > DISP_HEIGHT - 30) break;
+        for (uint32_t i = (uint32_t)desplazamiento_tabla; i < indice_decodificado; i++) {
+            if (fila_y + TABLE_ROW_H > DISP_HEIGHT - 30) break;
 
-            char ascii_c = (decoded_buffer[i] >= 32 && decoded_buffer[i] <= 126) ? decoded_buffer[i] : '.';
-            snprintf(buf, sizeof(buf), "%-4lu %-12lu 0x%02X  %c", (unsigned long)i,
-                     decoded_start_timestamps[i], decoded_buffer[i], ascii_c);
+            char ascii_c = (buffer_decodificado[i] >= 32 && buffer_decodificado[i] <= 126) ? buffer_decodificado[i] : '.';
+            snprintf(buffer, sizeof(buffer), "%-4lu %-12lu 0x%02X  %c", (unsigned long)i,
+                     tiempos_inicio_decodificados[i], buffer_decodificado[i], ascii_c);
             
-            DISP_DrawString(5, row_y, buf, COLOR_SIG_LABEL, COLOR_BG_DARK);
-            row_y += TABLE_ROW_H;
+            DISP_DibujarCadena(5, fila_y, buffer, COLOR_SIG_LABEL, COLOR_BG_DARK);
+            fila_y += TABLE_ROW_H;
         }
 
-        // Scrollbar
-        if (decoded_idx > (uint32_t)TABLE_ROWS_VISIBLE) {
-            uint16_t bar_h = (DISP_HEIGHT - 40 - TABLE_FIRST_Y) * TABLE_ROWS_VISIBLE / decoded_idx;
-            if (bar_h < 5) bar_h = 5;
-            uint16_t bar_y = TABLE_FIRST_Y + (DISP_HEIGHT - 40 - TABLE_FIRST_Y - bar_h) * table_scroll / max_scroll;
-            DISP_DrawVLine(DISP_WIDTH - 2, bar_y, bar_h, COLOR_UI_ACCENT);
+        // barra de desplazamiento
+        if (indice_decodificado > (uint32_t)TABLE_ROWS_VISIBLE) {
+            uint16_t alto_barra = (DISP_HEIGHT - 40 - TABLE_FIRST_Y) * TABLE_ROWS_VISIBLE / indice_decodificado;
+            if (alto_barra < 5) alto_barra = 5;
+            uint16_t barra_y = TABLE_FIRST_Y + (DISP_HEIGHT - 40 - TABLE_FIRST_Y - alto_barra) * desplazamiento_tabla / desplazamiento_max;
+            DISP_DibujarLineaV(DISP_WIDTH - 2, barra_y, alto_barra, COLOR_UI_ACCENT);
         }
     }
     
-    View_t view = views[current_state];
-    for (int i = 0; i < view.buttonCount; i++) {
-        view.buttons[i].isActive = (i == selected_button_idx);
-        UI_DrawButton(&view.buttons[i]);
+    View_t vista = vistas[estado_actual];
+    for (int i = 0; i < vista.conteoBotones; i++) {
+        vista.botones[i].estaActivo = (i == indice_boton_seleccionado);
+        UI_DibujarBoton(&vista.botones[i]);
     }
 }
 
-// Capture logic
-void LogicAnalyzer_Capture(void) {
-    const ProtocolPinConfig_t *cfg = Config_GetPinConfig(conf.protocol);
-    capture.active_channels = cfg->num_active_channels;
-    capture.total_samples = Config_GetSizeValue(conf.buffer_size);
 
-    for (uint8_t ch = 0; ch < LOGIC_NUM_CHANNELS; ch++) {
-        capture.channel_labels[ch] = cfg->channels[ch].label;
+
+
+extern volatile bool bandera_inicio_captura;
+
+void AlClicCaptura(void) {
+    bandera_inicio_captura = true;
+    DISP_LlenarRect(0, 0, DISP_WIDTH, DISP_HEIGHT, COLOR_BG_DARK);
+    DISP_DibujarTextoCentrado(0, DISP_HEIGHT/2 - 10, DISP_WIDTH, 20, "Capturing...", COLOR_UI_ACCENT, COLOR_BG_DARK);
+}
+
+void AlClicAtras(void) {
+    estado_actual = STATE_MAIN_MENU;
+    necesita_refresco = 1;
+}
+
+void AlClicVolverVisor(void) {
+    estado_actual = STATE_VIEWER;
+    visor_necesita_redibujo_completo = 1;
+    necesita_refresco = 1;
+}
+
+
+AppState_t estado_config_prev = STATE_MAIN_MENU;
+
+void AlClicConfig(void) {
+    estado_config_prev = estado_actual;
+    estado_actual = STATE_PROTOCOL_CONFIG;
+    necesita_refresco = 1;
+}
+
+
+void AlClicAtrasConfig(void) {
+    estado_actual = estado_config_prev;
+    if (estado_actual == STATE_VIEWER) {
+        visor_necesita_redibujo_completo = 1;
     }
-
-    for (uint16_t s = 0; s < capture.total_samples; s++) {
-        for (uint8_t ch = 0; ch < LOGIC_NUM_CHANNELS; ch++) {
-            GPIO_TypeDef *port = cfg->channels[ch].port;
-            uint16_t pin = cfg->channels[ch].pin;
-            capture.samples[ch][s] = (port->IDR & pin) ? 1 : 0;
-        }
-    }
+    necesita_refresco = 1;
 }
 
-// Button callbacks
-void OnOptionsClick(void) {
-    current_state = STATE_SETTINGS;
-    needs_refresh = 1;
-}
+extern volatile uint32_t indice_decodificado;
+extern volatile uint16_t estados_buffer[];
 
-void OnRedClick(void) {
-    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
-}
+void EnfocarEnPaquete(int32_t indice_paquete);
 
-extern volatile bool start_capture_flag;
-
-void OnCaptureClick(void) {
-    start_capture_flag = true;
-    DISP_FillRect(0, 0, DISP_WIDTH, DISP_HEIGHT, COLOR_BG_DARK);
-    DISP_DrawCenteredText(0, DISP_HEIGHT/2 - 10, DISP_WIDTH, 20, "Capturing...", COLOR_UI_ACCENT, COLOR_BG_DARK);
-}
-
-void OnBackClick(void) {
-    current_state = STATE_MAIN_MENU;
-    needs_refresh = 1;
-}
-
-void OnBackToViewerClick(void) {
-    current_state = STATE_VIEWER;
-    viewer_needs_full_redraw = 1;
-    needs_refresh = 1;
-}
-
-
-AppState_t prev_config_state = STATE_MAIN_MENU;
-
-void OnConfigClick(void) {
-    prev_config_state = current_state;
-    current_state = STATE_PROTOCOL_CONFIG;
-    needs_refresh = 1;
-}
-
-
-void OnConfigBackClick(void) {
-    current_state = prev_config_state;
-    if (current_state == STATE_VIEWER) {
-        viewer_needs_full_redraw = 1;
-    }
-    needs_refresh = 1;
-}
-
-extern volatile uint32_t decoded_idx;
-extern volatile uint16_t buffer_states[];
-extern volatile uint16_t decoded_start_indices[];
-
-void FocusOnPacket(int32_t packet_idx);
-
-void OnDecodeClick(void) {
-    decoded_idx = 0; // Reset decodings
+void AlClicDecodificar(void) {
+    indice_decodificado = 0; // reiniciar decodificaciones
     
-    config_global.protocolo.protocolo_activo = conf.protocol; // Sync the protocol
+    config_global.protocolo.protocolo_activo = conf.protocolo; // sincronizar protocolo
     
     extern void Configurar_Disparo_Protocolo(void);
-    Configurar_Disparo_Protocolo(); // Update pin assignments for the new protocol
+    Configurar_Disparo_Protocolo(); // actualizar asignacion de pines para nuevo protocolo
     
-    switch (conf.protocol) {
+    switch (conf.protocolo) {
         case UART:
-            UART_FSM((uint16_t*)buffer_states, capture.total_samples, &config_global.protocolo.settings.uart);
+            UART_FSM((uint16_t*)estados_buffer, captura.muestras_totales, &config_global.protocolo.ajustes.uart);
             break;
         case SPI:
-            SPI_FSM((uint16_t*)buffer_states, capture.total_samples, &config_global.protocolo.settings.spi);
+            SPI_FSM((uint16_t*)estados_buffer, captura.muestras_totales, &config_global.protocolo.ajustes.spi);
             break;
         case I2C:
-            I2C_FSM((uint16_t*)buffer_states, capture.total_samples, &config_global.protocolo.settings.i2c);
+            I2C_FSM((uint16_t*)estados_buffer, captura.muestras_totales, &config_global.protocolo.ajustes.i2c);
             break;
         default: break;
     }
     
-    if (decoded_idx > 0) {
-        FocusOnPacket(0);
+    if (indice_decodificado > 0) {
+        EnfocarEnPaquete(0);
     }
     
-    current_state = STATE_VIEWER;
-    viewer_needs_full_redraw = 1;
-    needs_refresh = 1;
+    estado_actual = STATE_VIEWER;
+    visor_necesita_redibujo_completo = 1;
+    necesita_refresco = 1;
 }
 
-void OnSettingClick(void) {
-    if (conf.protocol == UART) {
-        if (config_global.protocolo.settings.uart.baudrate == 9600) {
-            config_global.protocolo.settings.uart.baudrate = 115200;
+void AlClicAjuste(void) {
+    if (conf.protocolo == UART) {
+        if (config_global.protocolo.ajustes.uart.tasa_baudios == 9600) {
+            config_global.protocolo.ajustes.uart.tasa_baudios = 115200;
         } else {
-            config_global.protocolo.settings.uart.baudrate = 9600;
+            config_global.protocolo.ajustes.uart.tasa_baudios = 9600;
         }
-    } else if (conf.protocol == SPI) {
-        config_global.protocolo.settings.spi.mode = (config_global.protocolo.settings.spi.mode + 1) % 4;
+    } else if (conf.protocolo == SPI) {
+        config_global.protocolo.ajustes.spi.modo = (config_global.protocolo.ajustes.spi.modo + 1) % 4;
     }
-    needs_refresh = 1;
+    necesita_refresco = 1;
 }
 
-void OnTableClick(void) {
-    if(current_state == STATE_TABLE_VIEW) {
-        current_state = STATE_VIEWER;
-        viewer_needs_full_redraw = 1;
+void AlClicTabla(void) {
+    if(estado_actual == STATE_TABLE_VIEW) {
+        estado_actual = STATE_VIEWER;
+        visor_necesita_redibujo_completo = 1;
     } else {
-        current_state = STATE_TABLE_VIEW;
-        table_scroll = 0;  // start at first entry
+        estado_actual = STATE_TABLE_VIEW;
+        desplazamiento_tabla = 0;  // empezar en primera entrada
     }
-    needs_refresh = 1;
+    necesita_refresco = 1;
 }
 
-volatile uint8_t refresh_zoom_btn = 0;
+volatile uint8_t refrescar_boton_zoom = 0;
 
-void OnModeToggleClick(void) {
-    encoder_zoom_mode = !encoder_zoom_mode;
-    needs_refresh = 1;
+void AlClicAlternarModo(void) {
+    modo_zoom_encoder = !modo_zoom_encoder;
+    necesita_refresco = 1;
 }
 
-void FocusOnPacket(int32_t packet_idx) {
-    extern volatile uint32_t decoded_start_timestamps[];
-    extern volatile uint32_t decoded_end_timestamps[];
+void EnfocarEnPaquete(int32_t indice_paquete) {
+    extern volatile uint32_t tiempos_inicio_decodificados[];
+    extern volatile uint32_t tiempos_fin_decodificados[];
 
-    if (packet_idx < 0 || packet_idx >= decoded_idx) return;
+    if (indice_paquete < 0 || indice_paquete >= indice_decodificado) return;
 
-    uint32_t t_start = decoded_start_timestamps[packet_idx];
-    uint32_t t_end = decoded_end_timestamps[packet_idx];
-    uint32_t dt = t_end - t_start;
+    uint32_t inicio_t = tiempos_inicio_decodificados[indice_paquete];
+    uint32_t fin_t = tiempos_fin_decodificados[indice_paquete];
+    uint32_t dt = fin_t - inicio_t;
 
-    // We want the packet to take up about 250 pixels.
-    float target_divisor = (float)dt / 250.0f;
-    if (target_divisor <= 0.0f) target_divisor = 0.1f;
+    // queremos que el paquete ocupe unos 250 pixeles
+    float divisor_objetivo = (float)dt / 250.0f;
+    if (divisor_objetivo <= 0.0f) divisor_objetivo = 0.1f;
 
-    uint8_t best_zoom = MAX_ZOOM_IDX;
+    uint8_t mejor_zoom = MAX_ZOOM_IDX;
     for (uint8_t i = 0; i <= MAX_ZOOM_IDX; i++) {
-        if (zoom_divisors[i] >= target_divisor) {
-            best_zoom = i;
+        if (divisores_zoom[i] >= divisor_objetivo) {
+            mejor_zoom = i;
             break;
         }
     }
     
-    viewer_zoom = best_zoom;
+    zoom_visor = mejor_zoom;
 
-    // Leave a small margin on the left (e.g. 20 pixels)
-    uint32_t margin_time = (uint32_t)(20.0f * zoom_divisors[best_zoom]);
-    uint32_t target_t_scroll = (t_start > margin_time) ? (t_start - margin_time) : 0;
+    // dejar pequeño margen a la izquierda
+    uint32_t tiempo_margen = (uint32_t)(20.0f * divisores_zoom[mejor_zoom]);
+    uint32_t desplazamiento_t_objetivo = (inicio_t > tiempo_margen) ? (inicio_t - tiempo_margen) : 0;
     
-    viewer_t_scroll = target_t_scroll;
-    viewer_needs_full_redraw = 1;
-    needs_refresh = 1;
+    desplazamiento_t_visor = desplazamiento_t_objetivo;
+    visor_necesita_redibujo_completo = 1;
+    necesita_refresco = 1;
 }
 
-int32_t GetCurrentPacketIndex(void) {
-    extern volatile uint32_t buffer_timestamps[];
-    extern volatile uint32_t decoded_idx;
-    extern volatile uint32_t decoded_start_timestamps[];
-    extern volatile uint32_t decoded_end_timestamps[];
+int32_t ObtenerIndicePaqueteActual(void) {
+    extern volatile uint32_t tiempos_buffer[];
+    extern volatile uint32_t indice_decodificado;
+    extern volatile uint32_t tiempos_inicio_decodificados[];
+    extern volatile uint32_t tiempos_fin_decodificados[];
 
-    if (decoded_idx == 0) return -1;
+    if (indice_decodificado == 0) return -1;
     
-    uint32_t t_center = viewer_t_scroll + (uint32_t)(((DISP_WIDTH - LABEL_WIDTH) / 2.0f) * zoom_divisors[viewer_zoom]);
+    uint32_t centro_t = desplazamiento_t_visor + (uint32_t)(((DISP_WIDTH - LABEL_WIDTH) / 2.0f) * divisores_zoom[zoom_visor]);
     
-    int32_t best_idx = 0;
-    uint32_t min_dist = 0xFFFFFFFF;
+    int32_t mejor_indice = 0;
+    uint32_t dist_minima = 0xFFFFFFFF;
     
-    for (uint32_t i = 0; i < decoded_idx; i++) {
-        uint32_t mid = decoded_start_timestamps[i] + (decoded_end_timestamps[i] - decoded_start_timestamps[i])/2;
-        uint32_t dist = (t_center > mid) ? (t_center - mid) : (mid - t_center);
-        if (dist < min_dist) {
-            min_dist = dist;
-            best_idx = i;
+    for (uint32_t i = 0; i < indice_decodificado; i++) {
+        uint32_t medio = tiempos_inicio_decodificados[i] + (tiempos_fin_decodificados[i] - tiempos_inicio_decodificados[i])/2;
+        uint32_t distancia = (centro_t > medio) ? (centro_t - medio) : (medio - centro_t);
+        if (distancia < dist_minima) {
+            dist_minima = distancia;
+            mejor_indice = i;
         }
     }
-    return best_idx;
+    return mejor_indice;
 }
 
-void OnScrollLeftClick(void) {
-    int32_t cur = GetCurrentPacketIndex();
-    if (cur > 0) {
-        FocusOnPacket(cur - 1);
-    } else if (cur == 0) {
-        FocusOnPacket(0);
+void AlClicDesplazarIzq(void) {
+    uint32_t paso = (uint32_t)(((DISP_WIDTH - LABEL_WIDTH) * divisores_zoom[zoom_visor]) * 0.1f);
+    if (paso == 0) paso = 1;
+    if (desplazamiento_t_visor >= paso) {
+        desplazamiento_t_visor -= paso;
+    } else {
+        desplazamiento_t_visor = 0;
     }
+    necesita_refresco = 1;
 }
 
-void OnScrollRightClick(void) {
-    int32_t cur = GetCurrentPacketIndex();
-    extern volatile uint32_t decoded_idx;
-    if (cur >= 0 && cur < decoded_idx - 1) {
-        FocusOnPacket(cur + 1);
-    } else if (cur == decoded_idx - 1) {
-        FocusOnPacket(cur);
-    }
+void AlClicDesplazarDer(void) {
+    uint32_t paso = (uint32_t)(((DISP_WIDTH - LABEL_WIDTH) * divisores_zoom[zoom_visor]) * 0.1f);
+    if (paso == 0) paso = 1;
+    desplazamiento_t_visor += paso;
+    necesita_refresco = 1;
 }
 
-void OnEncoderScrollLeft(void) {
-    if (current_state == STATE_MAIN_MENU || current_state == STATE_PROTOCOL_CONFIG || current_state == STATE_SETTINGS) {
-        View_t view = views[current_state];
+void AlDesplazarEncoderIzq(void) {
+    if (estado_actual == STATE_MAIN_MENU || estado_actual == STATE_PROTOCOL_CONFIG || estado_actual == STATE_SETTINGS) {
+        View_t vista = vistas[estado_actual];
         do {
-            if (selected_button_idx <= 0) {
-                selected_button_idx = view.buttonCount - 1;
+            if (indice_boton_seleccionado <= 0) {
+                indice_boton_seleccionado = vista.conteoBotones - 1;
             } else {
-                selected_button_idx--;
+                indice_boton_seleccionado--;
             }
-        } while (view.buttons[selected_button_idx].text[0] == '\0');
-        needs_refresh = 1;
+        } while (vista.botones[indice_boton_seleccionado].texto[0] == '\0');
+        necesita_refresco = 1;
         return;
     }
-    if (current_state == STATE_TABLE_VIEW) {
-        if (table_scroll > 0) {
-            table_scroll--;
-            needs_refresh = 1;
+    if (estado_actual == STATE_TABLE_VIEW) {
+        if (desplazamiento_tabla > 0) {
+            desplazamiento_tabla--;
+            necesita_refresco = 1;
         }
         return;
     }
-    if (current_state == STATE_VIEWER) {
-        if (encoder_zoom_mode) {
-            if (viewer_zoom > 1) {
-                viewer_zoom--;
-                viewer_needs_full_redraw = 1;
-                needs_refresh = 1;
+    if (estado_actual == STATE_VIEWER) {
+        if (modo_zoom_encoder) {
+            if (zoom_visor > 0) {
+                zoom_visor--;
+                necesita_refresco = 1;
             }
         } else {
-            OnScrollLeftClick();
+            AlClicDesplazarIzq();
         }
     }
 }
 
-void OnEncoderScrollRight(void) {
-    if (current_state == STATE_MAIN_MENU || current_state == STATE_PROTOCOL_CONFIG || current_state == STATE_SETTINGS) {
-        View_t view = views[current_state];
+void AlDesplazarEncoderDer(void) {
+    if (estado_actual == STATE_MAIN_MENU || estado_actual == STATE_PROTOCOL_CONFIG || estado_actual == STATE_SETTINGS) {
+        View_t vista = vistas[estado_actual];
         do {
-            if (selected_button_idx < 0) {
-                selected_button_idx = 0;
+            if (indice_boton_seleccionado < 0) {
+                indice_boton_seleccionado = 0;
             } else {
-                selected_button_idx = (selected_button_idx + 1) % view.buttonCount;
+                indice_boton_seleccionado = (indice_boton_seleccionado + 1) % vista.conteoBotones;
             }
-        } while (view.buttons[selected_button_idx].text[0] == '\0');
-        needs_refresh = 1;
+        } while (vista.botones[indice_boton_seleccionado].texto[0] == '\0');
+        necesita_refresco = 1;
         return;
     }
-    if (current_state == STATE_TABLE_VIEW) {
-        extern volatile uint32_t decoded_idx;
-        if (table_scroll < (int16_t)decoded_idx - 1) {
-            table_scroll++;
-            needs_refresh = 1;
+    if (estado_actual == STATE_TABLE_VIEW) {
+        extern volatile uint32_t indice_decodificado;
+        if (desplazamiento_tabla < (int16_t)indice_decodificado - TABLE_ROWS_VISIBLE) {
+            desplazamiento_tabla++;
+            necesita_refresco = 1;
         }
         return;
     }
-    if (current_state == STATE_VIEWER) {
-        if (encoder_zoom_mode) {
-            if (viewer_zoom < MAX_ZOOM_IDX) {
-                viewer_zoom++;
-                viewer_needs_full_redraw = 1;
-                needs_refresh = 1;
+    if (estado_actual == STATE_VIEWER) {
+        if (modo_zoom_encoder) {
+            if (zoom_visor < MAX_ZOOM_IDX) {
+                zoom_visor++;
+                necesita_refresco = 1;
             }
         } else {
-            OnScrollRightClick();
+            AlClicDesplazarDer();
         }
     }
 }
 
-void OnEncoderButtonLongPress(void) {
-    if (current_state == STATE_VIEWER || current_state == STATE_TABLE_VIEW) {
-        OnTableClick();
+void AlPresionarLargoBotonEncoder(void) {
+    if (estado_actual == STATE_VIEWER || estado_actual == STATE_TABLE_VIEW) {
+        AlClicTabla();
     }
 }
 
-void OnEncoderButtonPress(void) {
-    if (current_state == STATE_VIEWER) {
-        OnModeToggleClick();
-    } else if (current_state == STATE_MAIN_MENU || current_state == STATE_PROTOCOL_CONFIG || current_state == STATE_SETTINGS) {
-        View_t view = views[current_state];
-        if (selected_button_idx >= 0 && selected_button_idx < view.buttonCount) {
-            if (view.buttons[selected_button_idx].onClick) {
-                view.buttons[selected_button_idx].onClick();
+void AlPresionarBotonEncoder(void) {
+    if (estado_actual == STATE_VIEWER) {
+        AlClicAlternarModo();
+    } else if (estado_actual == STATE_MAIN_MENU || estado_actual == STATE_PROTOCOL_CONFIG || estado_actual == STATE_SETTINGS) {
+        View_t vista = vistas[estado_actual];
+        if (indice_boton_seleccionado >= 0 && indice_boton_seleccionado < vista.conteoBotones) {
+            if (vista.botones[indice_boton_seleccionado].alClic) {
+                vista.botones[indice_boton_seleccionado].alClic();
             }
         }
     }
 }
 
 
-void OnZoomInClick(void) {
-    if (viewer_zoom > 0) {
-        viewer_zoom--;
-        viewer_needs_full_redraw = 1;
-        needs_refresh = 1;
-    }
+
+// retrollamadas de ajustes
+void AlClicProtocolo(void) {
+    conf.protocolo = (conf.protocolo + 1) % PROTOCOL_COUNT;
+    necesita_refresco = 1;
 }
 
-void OnZoomOutClick(void) {
-    if (viewer_zoom < MAX_ZOOM_IDX) {
-        viewer_zoom++;
-        viewer_needs_full_redraw = 1;
-        needs_refresh = 1;
-    }
+void AlClicFrec(void){
+    conf.frecuencia = (conf.frecuencia + 1) % FREQUENCY_COUNT;
+    necesita_refresco = 1;
 }
 
-// Settings callbacks
-void OnProtocolClick(void) {
-    conf.protocol = (conf.protocol + 1) % PROTOCOL_COUNT;
-    needs_refresh = 1;
+void AlClicTamaño(void){
+    conf.tamaño_buffer = (conf.tamaño_buffer + 1) % 4;
+    necesita_refresco = 1;
 }
 
-void OnFreqClick(void){
-    conf.frequency = (conf.frequency + 1) % FREQUENCY_COUNT;
-    needs_refresh = 1;
-}
-
-void OnSizeClick(void){
-    conf.buffer_size = (conf.buffer_size + 1) % 4;
-    needs_refresh = 1;
-}
-
-void OnTriggerClick(void){
+void AlClicDisparo(void){
     config_global.flanco = (config_global.flanco + 1) % 3;
-    needs_refresh = 1;
+    necesita_refresco = 1;
 }
 
-void OnRadixClick(void){
+void AlClicRadix(void){
     conf.radix = (conf.radix + 1) % 3;
-    needs_refresh = 1;
+    necesita_refresco = 1;
 }
 
 
-void OnUARTParamsClick(void){
-    if (config_global.protocolo.settings.uart.data_bits == 8 && config_global.protocolo.settings.uart.paridad == UART_PARITY_SIN && config_global.protocolo.settings.uart.stop_bits == UART_STOPBITS_1) {
-        config_global.protocolo.settings.uart.paridad = UART_PARITY_PAR; // 8E1
-    } else if (config_global.protocolo.settings.uart.data_bits == 8 && config_global.protocolo.settings.uart.paridad == UART_PARITY_PAR) {
-        config_global.protocolo.settings.uart.paridad = UART_PARITY_IMPAR; // 8O1
-    } else if (config_global.protocolo.settings.uart.data_bits == 8 && config_global.protocolo.settings.uart.paridad == UART_PARITY_IMPAR) {
-        config_global.protocolo.settings.uart.paridad = UART_PARITY_SIN;
-        config_global.protocolo.settings.uart.stop_bits = UART_STOPBITS_2; // 8N2
-    } else if (config_global.protocolo.settings.uart.data_bits == 8 && config_global.protocolo.settings.uart.stop_bits == UART_STOPBITS_2) {
-        config_global.protocolo.settings.uart.stop_bits = UART_STOPBITS_1;
-        config_global.protocolo.settings.uart.data_bits = 7; // 7N1
-    } else if (config_global.protocolo.settings.uart.data_bits == 7) {
-        config_global.protocolo.settings.uart.data_bits = 9; // 9N1
+void AlClicParamsUART(void){
+    if (config_global.protocolo.ajustes.uart.bits_datos == 8 && config_global.protocolo.ajustes.uart.paridad == UART_PARITY_SIN && config_global.protocolo.ajustes.uart.bits_parada == UART_STOPBITS_1) {
+        config_global.protocolo.ajustes.uart.paridad = UART_PARITY_PAR; // 8e1
+    } else if (config_global.protocolo.ajustes.uart.bits_datos == 8 && config_global.protocolo.ajustes.uart.paridad == UART_PARITY_PAR) {
+        config_global.protocolo.ajustes.uart.paridad = UART_PARITY_IMPAR; // 8o1
+    } else if (config_global.protocolo.ajustes.uart.bits_datos == 8 && config_global.protocolo.ajustes.uart.paridad == UART_PARITY_IMPAR) {
+        config_global.protocolo.ajustes.uart.paridad = UART_PARITY_SIN;
+        config_global.protocolo.ajustes.uart.bits_parada = UART_STOPBITS_2; // 8n2
+    } else if (config_global.protocolo.ajustes.uart.bits_datos == 8 && config_global.protocolo.ajustes.uart.bits_parada == UART_STOPBITS_2) {
+        config_global.protocolo.ajustes.uart.bits_parada = UART_STOPBITS_1;
+        config_global.protocolo.ajustes.uart.bits_datos = 7; // 7n1
+    } else if (config_global.protocolo.ajustes.uart.bits_datos == 7) {
+        config_global.protocolo.ajustes.uart.bits_datos = 9; // 9n1
     } else {
-        config_global.protocolo.settings.uart.data_bits = 8; // 8N1
-        config_global.protocolo.settings.uart.paridad = UART_PARITY_SIN;
-        config_global.protocolo.settings.uart.stop_bits = UART_STOPBITS_1;
+        config_global.protocolo.ajustes.uart.bits_datos = 8; // 8n1
+        config_global.protocolo.ajustes.uart.paridad = UART_PARITY_SIN;
+        config_global.protocolo.ajustes.uart.bits_parada = UART_STOPBITS_1;
     }
-    viewer_needs_full_redraw = 1;
-    needs_refresh = 1;
+    visor_necesita_redibujo_completo = 1;
+    necesita_refresco = 1;
 }
 
-void OnUARTLsbInvClick(void){
-    if (config_global.protocolo.settings.uart.lsb_first == 1 && config_global.protocolo.settings.uart.inverted == 0) {
-        config_global.protocolo.settings.uart.lsb_first = 0; // MSB, NRM
-    } else if (config_global.protocolo.settings.uart.lsb_first == 0 && config_global.protocolo.settings.uart.inverted == 0) {
-        config_global.protocolo.settings.uart.lsb_first = 1;
-        config_global.protocolo.settings.uart.inverted = 1; // LSB, INV
-    } else if (config_global.protocolo.settings.uart.lsb_first == 1 && config_global.protocolo.settings.uart.inverted == 1) {
-        config_global.protocolo.settings.uart.lsb_first = 0; // MSB, INV
+void AlClicUARTLsbInv(void){
+    if (config_global.protocolo.ajustes.uart.lsb_primero == 1 && config_global.protocolo.ajustes.uart.invertido == 0) {
+        config_global.protocolo.ajustes.uart.lsb_primero = 0; // msb, nrm
+    } else if (config_global.protocolo.ajustes.uart.lsb_primero == 0 && config_global.protocolo.ajustes.uart.invertido == 0) {
+        config_global.protocolo.ajustes.uart.lsb_primero = 1;
+        config_global.protocolo.ajustes.uart.invertido = 1; // lsb, inv
+    } else if (config_global.protocolo.ajustes.uart.lsb_primero == 1 && config_global.protocolo.ajustes.uart.invertido == 1) {
+        config_global.protocolo.ajustes.uart.lsb_primero = 0; // msb, inv
     } else {
-        config_global.protocolo.settings.uart.lsb_first = 1;
-        config_global.protocolo.settings.uart.inverted = 0; // LSB, NRM
+        config_global.protocolo.ajustes.uart.lsb_primero = 1;
+        config_global.protocolo.ajustes.uart.invertido = 0; // lsb, nrm
     }
-    viewer_needs_full_redraw = 1;
-    needs_refresh = 1;
+    visor_necesita_redibujo_completo = 1;
+    necesita_refresco = 1;
 }

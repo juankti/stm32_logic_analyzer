@@ -1,24 +1,24 @@
 /* USER CODE BEGIN Header */
 /**
   ******************************************************************************
-  * @file           : main.h
-  * @brief          : Header for main.c file.
-  *                   This file contains the common defines of the application.
+  * @archivo           : main.h
+  * @brief          : Header for main.c archivo.
+  *                   This archivo contains the common defines of the application.
   ******************************************************************************
   * @attention
   *
   * Copyright (c) 2026 STMicroelectronics.
   * All rights reserved.
   *
-  * This software is licensed under terms that can be found in the LICENSE file
+  * This software is licensed under terms that can be found in the LICENSE archivo
   * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
+  * If no LICENSE archivo comes with this software, it is provided AS-IS.
   *
   ******************************************************************************
   */
 /* USER CODE END Header */
 
-/* Define to prevent recursive inclusion -------------------------------------*/
+// definir para prevenir inclusion recursiva
 #ifndef __MAIN_H
 #define __MAIN_H
 
@@ -26,40 +26,40 @@
 extern "C" {
 #endif
 
-/* Includes ------------------------------------------------------------------*/
+// inclusiones
 #include "stm32f4xx_hal.h"
 
-/* Private includes ----------------------------------------------------------*/
+// inclusiones privadas
 /* USER CODE BEGIN Includes */
 #include <stdint.h>
 #include <stdbool.h>
 
 /* USER CODE END Includes */
 
-/* Exported types ------------------------------------------------------------*/
+// tipos exportados
 /* USER CODE BEGIN ET */
 
 /* USER CODE END ET */
 
-/* Exported constants --------------------------------------------------------*/
+// constantes exportadas
 /* USER CODE BEGIN EC */
 
 /* USER CODE END EC */
 
-/* Exported macro ------------------------------------------------------------*/
+// macro exportada
 /* USER CODE BEGIN EM */
 #define MAX_NUM_MUESTRAS 4096
 #define TIMER_FREQ_HZ (84000000/(TIM2->PSC+1))
 /* USER CODE END EM */
 
-/* Exported functions prototypes ---------------------------------------------*/
+// prototipos funciones exportadas
 void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
 
 /* USER CODE END EFP */
 
-/* Private defines -----------------------------------------------------------*/
+// definiciones privadas
 #define TOUCH_CS_Pin GPIO_PIN_0
 #define TOUCH_CS_GPIO_Port GPIOA
 #define TOUCH_INT_Pin GPIO_PIN_1
@@ -80,16 +80,14 @@ void Error_Handler(void);
 
 
 
-uint32_t Calculate_Samples_Per_Bit(uint32_t baudrate);
-bool User_Pressed_Start(void);
-void Hardware_Config_Trigger(void);
-void Update_Display_And_Log(void);
-void Log_Error(const char* msg);
-void Save_Decoded_Char(uint8_t c, uint32_t start_idx, uint32_t end_idx);
+bool Usuario_Presiono_Inicio(void);
+void Hardware_Configurar_Disparo(void);
+void Actualizar_Pantalla_Y_Registro(void);
+void Guardar_Caracter_Decodificado(uint8_t c, uint32_t indice_inicio, uint32_t indice_fin);
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __MAIN_H */
+#endif // __main_h

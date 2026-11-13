@@ -9,27 +9,27 @@ void Conf_Captura(void){
 	TIM1->CR1 &= ~TIM_CR1_CEN;
 	TIM2->CR1 &= ~TIM_CR1_CEN;
 
-    uint32_t prescaler = 83; // 1MHz default (84MHz/84)
-    switch(conf.frequency) {
-        case kHz20:  prescaler = 4199; break; // 20KHz
-        case kHz100: prescaler = 839; break; // 100KHz
-        case kHz400: prescaler = 209; break; // 400KHz
-        case MHz1:   prescaler = 83; break;  // 1MHz
-        case MHz2:   prescaler = 41; break;  // 2MHz
-        case MHz4:   prescaler = 20; break;  // 4MHz
-        case MHz10_5: prescaler = 7; break;  // 10.5MHz
+    uint32_t preescalador = 83; // 1mhz default (84MHz/84)
+    switch(conf.frecuencia) {
+        case kHz20:  preescalador = 4199; break; // 20khz
+        case kHz100: preescalador = 839; break; // 100khz
+        case kHz400: preescalador = 209; break; // 400khz
+        case MHz1:   preescalador = 83; break;  // 1mhz
+        case MHz2:   preescalador = 41; break;  // 2mhz
+        case MHz4:   preescalador = 20; break;  // 4mhz
+        case MHz10_5: preescalador = 7; break;  // 10.5mhz
     }
-    TIM1->PSC = prescaler;
-    TIM2->PSC = prescaler;
+    TIM1->PSC = preescalador;
+    TIM2->PSC = preescalador;
     
-    // Forzar actualización para que el nuevo prescaler aplique INMEDIATAMENTE.
+    // forzar actualizacion de preescalador
     TIM1->EGR = TIM_EGR_UG;
     TIM2->EGR = TIM_EGR_UG;
 
-	// dma1 (timestamps)
+	// dma1 (marcas de tiempo)
 	DMA1_Stream6->PAR = (uint32_t)&TIM2->CCR2;
-	DMA1_Stream6->M0AR = (uint32_t)buffer_timestamps;
-	DMA1_Stream6->NDTR = Config_GetSizeValue(conf.buffer_size);
+	DMA1_Stream6->M0AR = (uint32_t)tiempos_buffer;
+	DMA1_Stream6->NDTR = Config_ObtenerValorTamaño(conf.tamaño_buffer);
 	DMA1_Stream6->CR = DMA_SxCR_CHSEL_1 | DMA_SxCR_CHSEL_0 |
 	                       DMA_SxCR_MINC |
 	                       DMA_SxCR_MSIZE_1 |
@@ -37,8 +37,8 @@ void Conf_Captura(void){
 
 	// dma2 (gpioa)
 	DMA2_Stream1->PAR = (uint32_t)&GPIOA->IDR;
-	DMA2_Stream1->M0AR = (uint32_t)buffer_states;
-	DMA2_Stream1->NDTR = Config_GetSizeValue(conf.buffer_size);
+	DMA2_Stream1->M0AR = (uint32_t)estados_buffer;
+	DMA2_Stream1->NDTR = Config_ObtenerValorTamaño(conf.tamaño_buffer);
 	DMA2_Stream1->CR = DMA_SxCR_CHSEL_1 | DMA_SxCR_CHSEL_2 |
 	                       DMA_SxCR_MINC |
 	                       DMA_SxCR_MSIZE_0 |
@@ -48,23 +48,23 @@ void Conf_Captura(void){
 	TIM1->DIER |= TIM_DIER_CC1DE;
 	TIM2->DIER |= TIM_DIER_CC2DE;
 
-    // Configurar ambos timers para capturar en AMBOS flancos (RISING y FALLING)
-    // Esto es vital para UART (transiciones asíncronas). 
+    // configurar ambos timers para capturar en ambos flancos
+    // vital para uart (transiciones asincronas)
     TIM1->CCER |= (TIM_CCER_CC1P | TIM_CCER_CC1NP);
     TIM2->CCER |= (TIM_CCER_CC2P | TIM_CCER_CC2NP);
 }
 
 
-void Init_Captura() {
+void Inicializar_Captura() {
     TIM1->CNT = 0;
     TIM2->CNT = 0;
-    DMA1->HIFCR = DMA_HIFCR_CTCIF6; // Clear TCIF6
-    DMA2->LIFCR = DMA_LIFCR_CTCIF1; // Clear TCIF1
+    DMA1->HIFCR = DMA_HIFCR_CTCIF6; // limpiar tcif6
+    DMA2->LIFCR = DMA_LIFCR_CTCIF1; // limpiar tcif1
 
 	DMA1_Stream6->CR |= DMA_SxCR_EN;
 	DMA2_Stream1->CR |= DMA_SxCR_EN;
     
-    // Habilitar los canales de captura
+    // habilitar canales captura
     TIM1->CCER |= TIM_CCER_CC1E;
     TIM2->CCER |= TIM_CCER_CC2E;
     
@@ -72,25 +72,25 @@ void Init_Captura() {
 	TIM2->CR1 |= TIM_CR1_CEN;
 }
 
-void Stop_Captura(){
+void Detener_Captura(){
 	DMA1_Stream6->CR &= ~DMA_SxCR_EN;
 	DMA2_Stream1->CR &= ~DMA_SxCR_EN;
 	TIM1->CR1 &= ~TIM_CR1_CEN;
 	TIM2->CR1 &= ~TIM_CR1_CEN;
     
-    // Deshabilitar canales de captura
+    // deshabilitar canales de captura
     TIM1->CCER &= ~TIM_CCER_CC1E;
     TIM2->CCER &= ~TIM_CCER_CC2E;
     
-    // Limpiar flags de interrupción
-    DMA1->HIFCR = DMA_HIFCR_CTCIF6; // Clear Transfer Complete Int Flag for Stream 6
-    DMA2->LIFCR = DMA_LIFCR_CTCIF1; // Clear Transfer Complete Int Flag for Stream 1
+    // limpiar flags interrupcion
+    DMA1->HIFCR = DMA_HIFCR_CTCIF6; // limpiar tcif flujo 6
+    DMA2->LIFCR = DMA_LIFCR_CTCIF1; // limpiar bandera int de transferencia completa flujo 1
 }
 
 
-bool Capture_IsFinished(void) {
+bool Captura_Terminada(void) {
 
-      if (DMA2->LISR & DMA_LISR_TCIF1) { //transfer complete int flag
+      if (DMA2->LISR & DMA_LISR_TCIF1) { // bandera int de transferencia completa
         return true;
     }
     return false;

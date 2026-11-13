@@ -29,17 +29,17 @@ typedef enum {
     SIZE_4KB
 } BufferSize_t;
 
-const char * Config_GetProtocolText(Protocolo_t protocol);
-const char * Config_GetFreqText(Freq_t freq);
-const char * Config_GetRadixText(Radix_t radix);
-const char * Config_GetSizeText(BufferSize_t size);
-uint32_t Config_GetSizeValue(BufferSize_t size);
+const char * Config_ObtenerTextoProtocolo(Protocolo_t protocolo);
+const char * Config_ObtenerTextoFrec(Freq_t frec);
+const char * Config_ObtenerTextoRadix(Radix_t radix);
+const char * Config_ObtenerTextoTamaño(BufferSize_t tamaño);
+uint32_t Config_ObtenerValorTamaño(BufferSize_t tamaño);
 
 typedef struct {
-	Protocolo_t protocol;
-	Freq_t frequency;
+	Protocolo_t protocolo;
+	Freq_t frecuencia;
     Radix_t radix;
-    BufferSize_t buffer_size;
+    BufferSize_t tamaño_buffer;
 } Configuration_t;
 
 extern Configuration_t conf;
@@ -47,17 +47,17 @@ extern Configuration_t conf;
 #define LOGIC_NUM_CHANNELS 6
 
 typedef struct {
-	const char *label;
-	GPIO_TypeDef *port;
+	const char *etiqueta;
+	GPIO_TypeDef *puerto;
 	uint16_t pin;
 } PinChannel_t;
 
 typedef struct {
-	Protocolo_t protocol;
-	uint8_t num_active_channels;
-	PinChannel_t channels[LOGIC_NUM_CHANNELS];
+	Protocolo_t protocolo;
+	uint8_t num_canales_activos;
+	PinChannel_t canales[LOGIC_NUM_CHANNELS];
 } ProtocolPinConfig_t;
 
-const ProtocolPinConfig_t* Config_GetPinConfig(Protocolo_t protocol);
+const ProtocolPinConfig_t* Config_ObtenerConfigPin(Protocolo_t protocolo);
 
 #endif

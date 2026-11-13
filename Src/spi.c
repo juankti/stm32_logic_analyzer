@@ -1,71 +1,71 @@
 #include "spi.h"
 #include <stdbool.h>
 
-extern volatile uint8_t decoded_buffer[];
-extern volatile uint32_t decoded_idx;
-extern void Save_Decoded_Char(uint8_t c, uint32_t start_idx, uint32_t end_idx);
+extern volatile uint8_t buffer_decodificado[];
+extern volatile uint32_t indice_decodificado;
+extern void Guardar_Caracter_Decodificado(uint8_t c, uint32_t indice_inicio, uint32_t indice_fin);
 
-void SPI_FSM(uint16_t *buffer_states, uint32_t buffer_length, spi_config_t *config) {
-    uint8_t current_byte = 0;
-    uint8_t bit_counter = 0;
-    uint16_t prev_state = buffer_length > 0 ? buffer_states[0] : 0xFFFF;
+void SPI_FSM(uint16_t *estados_buffer, uint32_t longitud_buffer, spi_config_t *config) {
+    uint8_t byte_actual = 0;
+    uint8_t contador_bits = 0;
+    uint16_t estado_previo = longitud_buffer > 0 ? estados_buffer[0] : 0xFFFF;
     
-    // The DMA triggers exactly on the first edge of SCK.
-    // Therefore, the state of SCK right before this first sample was the opposite of what is recorded.
-    // By inverting it in prev_state, the first iteration of the loop will correctly detect the transition.
-    if (buffer_length > 0) {
-        prev_state ^= (1 << config->pin_sck);
+    // el dma dispara exactamente en el primer flanco de sck
+    // el estado de sck justo antes de primera muestra era el opuesto
+    // al invertirlo en estado_previo, la primera iteracion detecta transicion
+    if (longitud_buffer > 0) {
+        estado_previo ^= (1 << config->pin_sck);
     }
     
-    uint32_t packet_start_idx = 0; // Asumir alto inicialmente
+    uint32_t indice_inicio_paquete = 0; // asumir alto inicialmente
     
-    decoded_idx = 0; // Limpiar buffer de salida
+    indice_decodificado = 0; // limpiar buffer salida
 
-    for (uint32_t i = 0; i < buffer_length; i++) {
-        uint16_t current_state = buffer_states[i];
+    for (uint32_t i = 0; i < longitud_buffer; i++) {
+        uint16_t estado_actual = estados_buffer[i];
         
-        bool sck_state = (current_state & (1 << config->pin_sck)) ? 1 : 0;
-        bool cs_state = (current_state & (1 << config->pin_cs)) ? 1 : 0;
-        bool prev_sck_state = (prev_state & (1 << config->pin_sck)) ? 1 : 0;
-        bool mosi_state = (current_state & (1 << config->pin_mosi)) ? 1 : 0;
+        bool estado_sck = (estado_actual & (1 << config->pin_sck)) ? 1 : 0;
+        bool estado_cs = (estado_actual & (1 << config->pin_cs)) ? 1 : 0;
+        bool estado_sck_previo = (estado_previo & (1 << config->pin_sck)) ? 1 : 0;
+        bool estado_mosi = (estado_actual & (1 << config->pin_mosi)) ? 1 : 0;
         
-        if (bit_counter == 0) packet_start_idx = i;
+        if (contador_bits == 0) indice_inicio_paquete = i;
         
-        bool prev_cs_state = (prev_state & (1 << config->pin_cs)) ? 1 : 0;
-        if (cs_state == 1 && prev_cs_state == 0) {
-            // Flanco de subida en CS (pasa a inactivo), reiniciar estado
-            bit_counter = 0;
-            current_byte = 0;
+        bool estado_cs_prev = (estado_previo & (1 << config->pin_cs)) ? 1 : 0;
+        if (estado_cs == 1 && estado_cs_prev == 0) {
+            // flanco subida en cs (inactivo), reiniciar estado
+            contador_bits = 0;
+            byte_actual = 0;
         } 
         
-        // Procesar flancos siempre (si CS está high fijo por no estar conectado, igual decodifica)
-        bool is_rising = !prev_sck_state && sck_state;
-        bool is_falling = prev_sck_state && !sck_state;
-            bool sample_now = false;
+        // procesar flancos siempre
+        bool es_subida = !estado_sck_previo && estado_sck;
+        bool es_bajada = estado_sck_previo && !estado_sck;
+            bool muestra_ahora = false;
             
-            if (config->mode == SPI_MODE_0 || config->mode == SPI_MODE_3) {
-                sample_now = is_rising;
+            if (config->modo == SPI_MODE_0 || config->modo == SPI_MODE_3) {
+                muestra_ahora = es_subida;
             } else {
-                sample_now = is_falling;
+                muestra_ahora = es_bajada;
             }
             
-            if (sample_now) {
-                // Extraer bit de MOSI
-                if (config->bit_order == SPI_MSB_FIRST) {
-                    current_byte = (current_byte << 1) | mosi_state;
+            if (muestra_ahora) {
+                // extraer bit mosi
+                if (config->orden_bits == SPI_MSB_FIRST) {
+                    byte_actual = (byte_actual << 1) | estado_mosi;
                 } else {
-                    current_byte = current_byte | (mosi_state << bit_counter);
+                    byte_actual = byte_actual | (estado_mosi << contador_bits);
                 }
                 
-                bit_counter++;
+                contador_bits++;
                 
-                if (bit_counter >= config->data_size && config->data_size > 0) {
-                    // Guardar byte ensamblado
-                    Save_Decoded_Char(current_byte, packet_start_idx, i);
-                    bit_counter = 0;
-                    current_byte = 0;
+                if (contador_bits >= config->tamaño_datos && config->tamaño_datos > 0) {
+                    // guardar byte ensamblado
+                    Guardar_Caracter_Decodificado(byte_actual, indice_inicio_paquete, i);
+                    contador_bits = 0;
+                    byte_actual = 0;
                 }
             }
-        prev_state = current_state;
+        estado_previo = estado_actual;
     }
 }

@@ -8,12 +8,10 @@
 #include "config_analizador.h"
 
 typedef enum{
-	ESTADO_IDLE,
 	ESTADO_CONFIG,
 	ESTADO_READY,
 	ESTADO_CAPTURA,
-	ESTADO_DECOD,
-	ESTADO_EXPORT
+	ESTADO_DECOD
 }Estado_t;
 
 void Estado_FSM();

@@ -7,12 +7,12 @@ typedef void (*ButtonCallback)(void);
 typedef struct {
 	uint16_t x,y,w,h;
 	uint16_t color;
-	const char * text;
-	ButtonCallback onClick;
-	uint8_t isActive;
+	const char * texto;
+	ButtonCallback alClic;
+	uint8_t estaActivo;
 } Button_t;
 
-void UI_DrawButton(Button_t * btn);
-void UI_HandleClick(Button_t * btn, uint16_t touchX, uint16_t touchY);
-void UI_HandleActive(Button_t * btn, uint16_t touchX, uint16_t touchY);
+void UI_DibujarBoton(Button_t * boton);
+void UI_ManejarClic(Button_t * boton, uint16_t toqueX, uint16_t toqueY);
+void UI_ManejarActivo(Button_t * boton, uint16_t toqueX, uint16_t toqueY);
 #endif

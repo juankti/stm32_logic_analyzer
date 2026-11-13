@@ -30,17 +30,17 @@ static const char * const RADIX_TEXT[3] = {
         [RADIX_ASCII] = "ASCII"
 };
 
-const char * Config_GetProtocolText(Protocolo_t protocol){
-	if (protocol < PROTOCOL_COUNT) return PROTOCOLO_TEXT[protocol];
+const char * Config_ObtenerTextoProtocolo(Protocolo_t protocolo){
+	if (protocolo < PROTOCOL_COUNT) return PROTOCOLO_TEXT[protocolo];
 	return "UNKNOWN";
 }
 
-const char * Config_GetFreqText(Freq_t freq){
-	if (freq < FREQUENCY_COUNT) return FREQ_TEXT[freq];
+const char * Config_ObtenerTextoFrec(Freq_t frec){
+	if (frec < FREQUENCY_COUNT) return FREQ_TEXT[frec];
 	return "UNKNOWN";
 }
 
-const char * Config_GetRadixText(Radix_t radix){
+const char * Config_ObtenerTextoRadix(Radix_t radix){
 	if (radix < 3) return RADIX_TEXT[radix];
 	return "UNKNOWN";
 }
@@ -52,13 +52,13 @@ static const char * BUFFER_SIZE_TEXT[] = {
     "4096"
 };
 
-const char * Config_GetSizeText(BufferSize_t size) {
-    if (size < 4) return BUFFER_SIZE_TEXT[size];
+const char * Config_ObtenerTextoTamaño(BufferSize_t tamaño) {
+    if (tamaño < 4) return BUFFER_SIZE_TEXT[tamaño];
     return "UNKNOWN";
 }
 
-uint32_t Config_GetSizeValue(BufferSize_t size) {
-    switch (size) {
+uint32_t Config_ObtenerValorTamaño(BufferSize_t tamaño) {
+    switch (tamaño) {
         case SIZE_0_5KB: return 512;
         case SIZE_1KB: return 1024;
         case SIZE_2KB: return 2048;
@@ -67,60 +67,60 @@ uint32_t Config_GetSizeValue(BufferSize_t size) {
     }
 }
 
-ProtocolPinConfig_t pin_configs[PROTOCOL_COUNT] = {
+ProtocolPinConfig_t configs_pin[PROTOCOL_COUNT] = {
     [NONE] = {
-		.protocol = NONE,
-		.num_active_channels = 6,
-		.channels = {
-			{.label = "CH1", .port = GPIOA, .pin = GPIO_PIN_8},
-			{.label = "CH2", .port = GPIOA, .pin = GPIO_PIN_9},
-			{.label = "CH3", .port = GPIOA, .pin = GPIO_PIN_10},
-			{.label = "CH4", .port = GPIOA, .pin = GPIO_PIN_11},
-			{.label = "CH5", .port = GPIOA, .pin = GPIO_PIN_12},
-			{.label = "CH6", .port = GPIOA, .pin = GPIO_PIN_15},
+		.protocolo = NONE,
+		.num_canales_activos = 6,
+		.canales = {
+			{.etiqueta = "CH1", .puerto = GPIOA, .pin = GPIO_PIN_8},
+			{.etiqueta = "CH2", .puerto = GPIOA, .pin = GPIO_PIN_9},
+			{.etiqueta = "CH3", .puerto = GPIOA, .pin = GPIO_PIN_10},
+			{.etiqueta = "CH4", .puerto = GPIOA, .pin = GPIO_PIN_11},
+			{.etiqueta = "CH5", .puerto = GPIOA, .pin = GPIO_PIN_12},
+			{.etiqueta = "CH6", .puerto = GPIOA, .pin = GPIO_PIN_15},
 		}
 	},
 	[UART] = {
-		.protocol = UART,
-		.num_active_channels = 1,
-		.channels = {
-			{.label = "RX",  .port = GPIOA, .pin = GPIO_PIN_8},
-			{.label = "CH2", .port = GPIOA, .pin = GPIO_PIN_9},
-			{.label = "CH3", .port = GPIOA, .pin = GPIO_PIN_10},
-			{.label = "CH4", .port = GPIOA, .pin = GPIO_PIN_11},
-			{.label = "CH5", .port = GPIOA, .pin = GPIO_PIN_12},
-			{.label = "CH6", .port = GPIOA, .pin = GPIO_PIN_15},
+		.protocolo = UART,
+		.num_canales_activos = 1,
+		.canales = {
+			{.etiqueta = "RX",  .puerto = GPIOA, .pin = GPIO_PIN_8},
+			{.etiqueta = "CH2", .puerto = GPIOA, .pin = GPIO_PIN_9},
+			{.etiqueta = "CH3", .puerto = GPIOA, .pin = GPIO_PIN_10},
+			{.etiqueta = "CH4", .puerto = GPIOA, .pin = GPIO_PIN_11},
+			{.etiqueta = "CH5", .puerto = GPIOA, .pin = GPIO_PIN_12},
+			{.etiqueta = "CH6", .puerto = GPIOA, .pin = GPIO_PIN_15},
 		}
 	},
 	[SPI] = {
-		.protocol = SPI,
-		.num_active_channels = 4,
-		.channels = {
-			{.label = "SCLK", .port = GPIOA, .pin = GPIO_PIN_8},
-			{.label = "CS",   .port = GPIOA, .pin = GPIO_PIN_9},
-			{.label = "MOSI", .port = GPIOA, .pin = GPIO_PIN_10},
-			{.label = "MISO", .port = GPIOA, .pin = GPIO_PIN_11},
-			{.label = "CH5",  .port = GPIOA, .pin = GPIO_PIN_12},
-			{.label = "CH6",  .port = GPIOA, .pin = GPIO_PIN_15},
+		.protocolo = SPI,
+		.num_canales_activos = 4,
+		.canales = {
+			{.etiqueta = "SCLK", .puerto = GPIOA, .pin = GPIO_PIN_8},
+			{.etiqueta = "CS",   .puerto = GPIOA, .pin = GPIO_PIN_9},
+			{.etiqueta = "MOSI", .puerto = GPIOA, .pin = GPIO_PIN_10},
+			{.etiqueta = "MISO", .puerto = GPIOA, .pin = GPIO_PIN_11},
+			{.etiqueta = "CH5",  .puerto = GPIOA, .pin = GPIO_PIN_12},
+			{.etiqueta = "CH6",  .puerto = GPIOA, .pin = GPIO_PIN_15},
 		}
 	},
 	[I2C] = {
-		.protocol = I2C,
-		.num_active_channels = 2,
-		.channels = {
-			{.label = "SDA", .port = GPIOA, .pin = GPIO_PIN_8},
-			{.label = "SCL", .port = GPIOA, .pin = GPIO_PIN_9},
-			{.label = "CH3", .port = GPIOA, .pin = GPIO_PIN_10},
-			{.label = "CH4", .port = GPIOA, .pin = GPIO_PIN_11},
-			{.label = "CH5", .port = GPIOA, .pin = GPIO_PIN_12},
-			{.label = "CH6", .port = GPIOA, .pin = GPIO_PIN_15},
+		.protocolo = I2C,
+		.num_canales_activos = 2,
+		.canales = {
+			{.etiqueta = "SDA", .puerto = GPIOA, .pin = GPIO_PIN_8},
+			{.etiqueta = "SCL", .puerto = GPIOA, .pin = GPIO_PIN_9},
+			{.etiqueta = "CH3", .puerto = GPIOA, .pin = GPIO_PIN_10},
+			{.etiqueta = "CH4", .puerto = GPIOA, .pin = GPIO_PIN_11},
+			{.etiqueta = "CH5", .puerto = GPIOA, .pin = GPIO_PIN_12},
+			{.etiqueta = "CH6", .puerto = GPIOA, .pin = GPIO_PIN_15},
 		}
 	}
 };
 
-const ProtocolPinConfig_t* Config_GetPinConfig(Protocolo_t protocol) {
-	if (protocol < PROTOCOL_COUNT) {
-		return &pin_configs[protocol];
+const ProtocolPinConfig_t* Config_ObtenerConfigPin(Protocolo_t protocolo) {
+	if (protocolo < PROTOCOL_COUNT) {
+		return &configs_pin[protocolo];
 	}
-	return &pin_configs[NONE];
+	return &configs_pin[NONE];
 }

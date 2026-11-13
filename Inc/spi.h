@@ -34,26 +34,26 @@ typedef struct {
     uint32_t pin_sck;  // pin sck
     uint32_t pin_cs;   // pin cs
     
-    spi_mode_t mode;             // modo spi
-    spi_bit_order_t bit_order;   // msb o lsb
-    uint8_t data_size;           // tamaño de palabra
+    spi_mode_t modo;             // modo spi
+    spi_bit_order_t orden_bits;   // msb o lsb
+    uint8_t tamaño_datos;           // tamaño de palabra
 } spi_config_t;
 
 // contexto fsm
 typedef struct {
     spi_config_t config;
-    spi_decoder_state_t state;
+    spi_decoder_state_t estado;
     
-    uint32_t sample_idx;         // indice del buffer
-    uint32_t prev_pins_state;    // estado anterior
+    uint32_t indice_muestra;         // indice del buffer
+    uint32_t estado_pines_previo;    // estado anterior
     
-    uint16_t current_mosi_data;  // dato mosi
-    uint16_t current_miso_data;  // dato miso
-    uint8_t bit_counter;         // contador bits
+    uint16_t datos_mosi_actuales;  // dato mosi
+    uint16_t datos_miso_actuales;  // dato miso
+    uint8_t contador_bits;         // contador bits
     
-    uint32_t bytes_decoded;      // total bytes
+    uint32_t bytes_decodificados;      // bytes totales
 } spi_decoder_ctx_t;
 
-void SPI_FSM(uint16_t *buffer_states, uint32_t buffer_length, spi_config_t *config);
+void SPI_FSM(uint16_t *estados_buffer, uint32_t longitud_buffer, spi_config_t *config);
 
 #endif
